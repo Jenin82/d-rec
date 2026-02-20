@@ -124,3 +124,28 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Print styles */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+  }
+
+  nav,
+  aside,
+  button,
+  .no-print {
+    display: none !important;
+  }
+
+  .print\:space-y-4 > * + * {
+    margin-top: 1rem;
+  }
+
+  * {
+    box-shadow: none !important;
+    border-color: #e5e7eb !important;
+  }
+}
