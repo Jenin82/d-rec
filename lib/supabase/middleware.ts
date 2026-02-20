@@ -3,8 +3,10 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import type { Database } from "@/types/db.types";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co";
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY ?? "placeholder-key";
 
 export const createClient = (request: NextRequest) => {
   // Create an unmodified response
@@ -14,7 +16,7 @@ export const createClient = (request: NextRequest) => {
     },
   });
 
-  const supabase = createServerClient<Database>(supabaseUrl!, supabaseKey!, {
+  const supabase = createServerClient<Database>(supabaseUrl, supabaseKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
