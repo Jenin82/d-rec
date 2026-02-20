@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createClient } from "@/lib/supabase/middleware";
 
-const PUBLIC_ROUTES = new Set(["/login", "/signup", "/auth/callback"]);
+const PUBLIC_ROUTES = new Set(["/", "/login", "/signup", "/auth/callback"]);
 
 export async function middleware(request: NextRequest) {
   const { supabase, response } = createClient(request);
@@ -13,10 +13,12 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // Allow public routes
   if (PUBLIC_ROUTES.has(pathname)) {
     return response;
   }
 
+  // Redirect unauthenticated users to login
   if (!user) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
