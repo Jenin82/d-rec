@@ -260,3 +260,4 @@ export default function LandingPage() {
     </div>
   );
 }
+// Digital Record platform
