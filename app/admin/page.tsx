@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import {
