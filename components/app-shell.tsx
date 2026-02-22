@@ -1,11 +1,7 @@
 import type React from "react";
 import Link from "next/link";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-
-const statusLabel = "Prototype";
 
 type NavItem = {
   label: string;
@@ -42,26 +38,12 @@ export function AppShell({
               <p className="text-sm text-muted-foreground">{subtitle}</p>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="secondary">{statusLabel}</Badge>
               {actions}
               <Button asChild size="sm" variant="outline">
-                <Link href="/">Back to overview</Link>
+                <Link href="/dashboard">Back to overview</Link>
               </Button>
             </div>
           </div>
-          <Card className="flex flex-wrap items-center gap-3 border-dashed px-4 py-3 text-xs text-muted-foreground">
-            {navItems.map((item) => (
-              <Button
-                key={item.href}
-                asChild
-                variant="ghost"
-                size="sm"
-                className="justify-start"
-              >
-                <Link href={item.href}>{item.label}</Link>
-              </Button>
-            ))}
-          </Card>
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[240px_1fr]">

@@ -1,4 +1,3 @@
-
 export type Json =
   | string
   | number
@@ -60,6 +59,45 @@ export type Database = {
           {
             foreignKeyName: "algorithm_submissions_student_id_fkey"
             columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      classroom_invites: {
+        Row: {
+          classroom_id: string | null
+          created_at: string | null
+          email: string
+          id: string
+          invited_by: string | null
+        }
+        Insert: {
+          classroom_id?: string | null
+          created_at?: string | null
+          email: string
+          id?: string
+          invited_by?: string | null
+        }
+        Update: {
+          classroom_id?: string | null
+          created_at?: string | null
+          email?: string
+          id?: string
+          invited_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "classroom_invites_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "classroom_invites_invited_by_fkey"
+            columns: ["invited_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -191,6 +229,87 @@ export type Database = {
           {
             foreignKeyName: "code_submissions_student_id_fkey"
             columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_invites: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+          invited_by: string | null
+          organization_id: string | null
+          role: Database["public"]["Enums"]["user_role"]
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id?: string
+          invited_by?: string | null
+          organization_id?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+          invited_by?: string | null
+          organization_id?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_invites_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_invites_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_members: {
+        Row: {
+          created_at: string | null
+          id: string
+          organization_id: string | null
+          role: Database["public"]["Enums"]["org_role"]
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          organization_id?: string | null
+          role?: Database["public"]["Enums"]["org_role"]
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          organization_id?: string | null
+          role?: Database["public"]["Enums"]["org_role"]
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_members_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_members_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -333,6 +452,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      org_role: "owner" | "admin" | "teacher" | "student"
       user_role: "superadmin" | "admin" | "teacher" | "student"
     }
     CompositeTypes: {
@@ -461,6 +581,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      org_role: ["owner", "admin", "teacher", "student"],
       user_role: ["superadmin", "admin", "teacher", "student"],
     },
   },
