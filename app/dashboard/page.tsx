@@ -54,8 +54,25 @@ export default function DashboardPage() {
     }
   }, [user]);
 
+  async function processInvites() {
+    // Calls a SECURITY DEFINER function that reads org_invites by email
+    // and inserts into organization_members — bypassing RLS safely.
+    const { error } = await supabase.rpc("accept_my_invites");
+    if (error) {
+      console.warn("processInvites:", error.message);
+    }
+  }
+
   async function loadOrganizations() {
     setIsLoading(true);
+
+    const userEmail = user?.email;
+    const userId = user!.id;
+
+    // First auto-accept any pending invites for this user's email
+    if (userEmail) {
+      await processInvites();
+    }
 
     // Get user's organization memberships with their role
     const { data: memberData, error: memberError } = await supabase
@@ -71,7 +88,7 @@ export default function DashboardPage() {
         )
       `,
       )
-      .eq("user_id", user!.id);
+      .eq("user_id", userId);
 
     if (memberError) {
       console.error("Error loading organizations:", memberError);
