@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Save, Plus } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
+import { useQuestionStore } from "@/stores/question-store";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -23,38 +24,82 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { supabase } from "@/lib/supabase/client";
 
-// Mock data
-const mockClassrooms = [
-  { id: "c1", name: "Data Structures - Fall 2025" },
-  { id: "c2", name: "Algorithms - Fall 2025" },
-];
-
-export default function CreateQuestionPage({
-  params,
-}: {
-  params: { orgId: string };
-}) {
-  const { orgId } = params;
+export default function CreateQuestionPage() {
+  const params = useParams();
+  const orgId = params.orgId as string;
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedClassroom, setSelectedClassroom] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [classrooms, setClassrooms] = useState<{ id: string; name: string }[]>(
+    [],
+  );
 
-  const handleCreateQuestion = () => {
+  const searchParams = useSearchParams();
+  const preselectedClassroomId = searchParams.get("classroom");
+  const { createProgram } = useQuestionStore();
+
+  useEffect(() => {
+    if (orgId) {
+      loadClassrooms();
+    }
+  }, [orgId]);
+
+  useEffect(() => {
+    if (preselectedClassroomId && classrooms.length > 0 && !selectedClassroom) {
+      if (classrooms.some((c) => c.id === preselectedClassroomId)) {
+        setSelectedClassroom(preselectedClassroomId);
+      }
+    }
+  }, [preselectedClassroomId, classrooms, selectedClassroom]);
+
+  async function loadClassrooms() {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user?.id) return;
+
+    const { data: memberData } = await supabase
+      .from("organization_members")
+      .select("role")
+      .eq("organization_id", orgId)
+      .eq("user_id", userData.user.id)
+      .single();
+
+    if (
+      memberData &&
+      (memberData.role === "admin" || memberData.role === "owner")
+    ) {
+      const { data } = await supabase
+        .from("classrooms")
+        .select("id, name")
+        .eq("organization_id", orgId);
+      if (data) setClassrooms(data);
+    } else {
+      const { data } = await supabase
+        .from("classrooms")
+        .select("id, name, classroom_members!inner(user_id)")
+        .eq("organization_id", orgId)
+        .eq("classroom_members.user_id", userData.user.id);
+      if (data) setClassrooms(data);
+    }
+  }
+
+  const handleCreateQuestion = async () => {
+    if (!title || !description || !selectedClassroom) return;
     setIsSubmitting(true);
-    console.log("Creating question:", {
+
+    await createProgram({
       title,
       description,
-      classroomId: selectedClassroom,
+      classroom_id: selectedClassroom,
+      status: "published",
+      metadata: {},
     });
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false);
-      router.push(`/${orgId}/teacher/questions`);
-    }, 1000);
+    setIsSubmitting(false);
+    router.push(`/${orgId}/teacher/classrooms/${selectedClassroom}`);
   };
 
   return (
@@ -89,12 +134,19 @@ export default function CreateQuestionPage({
             <Select
               value={selectedClassroom}
               onValueChange={setSelectedClassroom}
+              disabled={classrooms.length === 0}
             >
               <SelectTrigger id="classroom" className="w-full md:w-[300px]">
-                <SelectValue placeholder="Select a classroom" />
+                <SelectValue
+                  placeholder={
+                    classrooms.length === 0
+                      ? "No classrooms available"
+                      : "Select a classroom"
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
-                {mockClassrooms.map((cls) => (
+                {classrooms.map((cls) => (
                   <SelectItem key={cls.id} value={cls.id}>
                     {cls.name}
                   </SelectItem>

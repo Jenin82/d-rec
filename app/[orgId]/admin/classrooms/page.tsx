@@ -2,13 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Plus, Users2 } from "lucide-react";
+import { Plus, Users2, Users, ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -34,6 +42,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { supabase } from "@/lib/supabase/client";
+import { Textarea } from "@/components/ui/textarea";
 
 type Classroom = {
   id: string;
@@ -42,28 +51,66 @@ type Classroom = {
   created_at: string;
 };
 
+type Teacher = {
+  user_id: string;
+  profiles: {
+    full_name: string | null;
+    email: string | null;
+  } | null;
+};
+
 export default function AdminClassroomsPage() {
   const params = useParams();
   const orgId = params.orgId as string;
 
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newTerm, setNewTerm] = useState("");
+  const [selectedTeacher, setSelectedTeacher] = useState<string>("none");
+
+  // Invite students state
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [selectedClassroom, setSelectedClassroom] = useState<Classroom | null>(
+    null,
+  );
+  const [inviteEmails, setInviteEmails] = useState("");
+  const [isInviting, setIsInviting] = useState(false);
 
   const navItems = [
     { label: "Overview", href: `/${orgId}/admin` },
-    { label: "Teachers", href: `/${orgId}/admin/teachers` },
+    { label: "Users", href: `/${orgId}/admin/users` },
     { label: "Classrooms", href: `/${orgId}/admin/classrooms` },
-    { label: "Students", href: `/${orgId}/admin/students` },
     { label: "Settings", href: `/${orgId}/admin/settings` },
   ];
 
   useEffect(() => {
-    loadClassrooms();
+    if (orgId) {
+      loadClassrooms();
+      loadTeachers();
+    }
   }, [orgId]);
+
+  async function loadTeachers() {
+    const { data, error } = await supabase
+      .from("organization_members")
+      .select("user_id, profiles(full_name)")
+      .eq("organization_id", orgId)
+      .in("role", ["teacher", "admin", "owner"]);
+
+    if (!error && data) {
+      // Supabase's generated generic types might nest profiles differently.
+      // Assuming array or single object.
+      const formattedTeachers = data.map((d: any) => ({
+        user_id: d.user_id,
+        profiles: Array.isArray(d.profiles) ? d.profiles[0] : d.profiles,
+      }));
+      setTeachers(formattedTeachers);
+    }
+  }
 
   async function loadClassrooms() {
     setIsLoading(true);
@@ -80,15 +127,30 @@ export default function AdminClassroomsPage() {
   async function handleCreate() {
     if (!newName.trim()) return;
     setIsCreating(true);
-    const { error } = await supabase.from("classrooms").insert({
-      organization_id: orgId,
-      name: newName.trim(),
-      term: newTerm.trim() || null,
-    });
-    if (!error) {
+    const { data: classData, error } = await supabase
+      .from("classrooms")
+      .insert({
+        organization_id: orgId,
+        name: newName.trim(),
+        term: newTerm.trim() || null,
+      })
+      .select()
+      .single();
+
+    if (!error && classData) {
+      // Assign teacher if selected
+      if (selectedTeacher && selectedTeacher !== "none") {
+        await supabase.from("classroom_members").insert({
+          classroom_id: classData.id,
+          user_id: selectedTeacher,
+          role: "teacher",
+        });
+      }
+
       toast.success("Classroom created.");
       setNewName("");
       setNewTerm("");
+      setSelectedTeacher("none");
       setIsDialogOpen(false);
       loadClassrooms();
     } else {
@@ -96,6 +158,35 @@ export default function AdminClassroomsPage() {
     }
     setIsCreating(false);
   }
+
+  const handleInviteStudents = async () => {
+    if (!selectedClassroom || !inviteEmails.trim()) return;
+
+    setIsInviting(true);
+    const emails = inviteEmails
+      .split(/[\n,]/)
+      .map((e) => e.trim())
+      .filter((e) => e.length > 0);
+
+    const { data: userData } = await supabase.auth.getUser();
+
+    const invites = emails.map((email) => ({
+      classroom_id: selectedClassroom.id,
+      email,
+      invited_by: userData.user?.id,
+    }));
+
+    const { error } = await supabase.from("classroom_invites").insert(invites);
+
+    if (!error) {
+      toast.success("Students added to classroom.");
+      setInviteEmails("");
+      setIsInviteOpen(false);
+    } else {
+      toast.error("Failed to add students.");
+    }
+    setIsInviting(false);
+  };
 
   return (
     <AppShell
@@ -134,6 +225,29 @@ export default function AdminClassroomsPage() {
                   onChange={(e) => setNewTerm(e.target.value)}
                 />
               </div>
+              <div className="grid gap-2">
+                <Label>Assign Teacher</Label>
+                <Select
+                  value={selectedTeacher}
+                  onValueChange={setSelectedTeacher}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a teacher (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">
+                      No Teacher (Unassigned)
+                    </SelectItem>
+                    {teachers.map((t) => (
+                      <SelectItem key={t.user_id} value={t.user_id}>
+                        {t.profiles?.full_name ||
+                          t.profiles?.email ||
+                          t.user_id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
               <Button
@@ -171,6 +285,7 @@ export default function AdminClassroomsPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Term</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -180,6 +295,19 @@ export default function AdminClassroomsPage() {
                     <TableCell>{c.term ?? "—"}</TableCell>
                     <TableCell>
                       {new Date(c.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        asChild
+                      >
+                        <Link href={`/${orgId}/admin/classrooms/${c.id}`}>
+                          View Details
+                          <ChevronRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

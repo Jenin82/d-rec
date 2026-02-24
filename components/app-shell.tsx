@@ -2,6 +2,8 @@ import type React from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { ModeToggle } from "./mode-toggle";
 
 type NavItem = {
   label: string;
@@ -37,11 +39,10 @@ export function AppShell({
               </h1>
               <p className="text-sm text-muted-foreground">{subtitle}</p>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-2 pr-4 sm:pr-8">
               {actions}
-              <Button asChild size="sm" variant="outline">
-                <Link href="/dashboard">Back to overview</Link>
-              </Button>
+              <ModeToggle />
             </div>
           </div>
         </header>

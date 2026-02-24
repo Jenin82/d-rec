@@ -19,27 +19,11 @@ import {
 const SECTIONS = [
   {
     icon: Users,
-    title: "Teacher Management",
+    title: "User Management",
     description:
-      "Onboard new teachers, assign roles, and monitor their classroom activities.",
-    path: "teachers",
-    label: "Manage Teachers",
-  },
-  {
-    icon: GraduationCap,
-    title: "Classroom Management",
-    description:
-      "Create new classrooms, oversee active sessions, and review overall progress.",
-    path: "classrooms",
-    label: "Manage Classrooms",
-  },
-  {
-    icon: UsersRound,
-    title: "Student Management",
-    description:
-      "View student enrollments, track department-wide performance and metrics.",
-    path: "students",
-    label: "Manage Students",
+      "Manage all organization members: owners, admins, teachers, and students.",
+    path: "users",
+    label: "Manage Users",
   },
 ];
 
@@ -49,9 +33,8 @@ export default function AdminPage() {
 
   const navItems = [
     { label: "Overview", href: `/${orgId}/admin` },
-    { label: "Teachers", href: `/${orgId}/admin/teachers` },
+    { label: "Users", href: `/${orgId}/admin/users` },
     { label: "Classrooms", href: `/${orgId}/admin/classrooms` },
-    { label: "Students", href: `/${orgId}/admin/students` },
     { label: "Settings", href: `/${orgId}/admin/settings` },
   ];
 

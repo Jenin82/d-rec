@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Users, Search } from "lucide-react";
+import { useParams } from "next/navigation";
+import { Plus, Users, Search, ChevronRight } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
+import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -33,12 +35,9 @@ type Classroom = {
   created_at: string;
 };
 
-export default function ClassroomsPage({
-  params,
-}: {
-  params: { orgId: string };
-}) {
-  const { orgId } = params;
+export default function ClassroomsPage() {
+  const params = useParams();
+  const orgId = params.orgId as string;
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -98,6 +97,8 @@ export default function ClassroomsPage({
     if (!orgId || !newClassName.trim()) return;
 
     setIsCreating(true);
+    const { data: userData } = await supabase.auth.getUser();
+
     const { data, error } = await supabase
       .from("classrooms")
       .insert({
@@ -109,6 +110,13 @@ export default function ClassroomsPage({
       .single();
 
     if (!error && data) {
+      if (userData.user?.id) {
+        await supabase.from("classroom_members").insert({
+          classroom_id: data.id,
+          user_id: userData.user.id,
+          role: "teacher",
+        });
+      }
       setClassrooms([data, ...classrooms]);
       setNewClassName("");
       setNewClassTerm("");
@@ -254,61 +262,19 @@ export default function ClassroomsPage({
                 </CardHeader>
                 <CardContent className="flex-1 flex flex-col justify-end">
                   <div className="flex items-center gap-2 mt-4 pt-4 border-t">
-                    <Dialog
-                      open={
-                        isInviteOpen && selectedClassroom?.id === classroom.id
-                      }
-                      onOpenChange={(open) => {
-                        setIsInviteOpen(open);
-                        if (open) setSelectedClassroom(classroom);
-                        else setSelectedClassroom(null);
-                      }}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2"
+                      asChild
                     >
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full gap-2"
-                        >
-                          <Users className="h-4 w-4" />
-                          Add Students
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>
-                            Add Students to {classroom.name}
-                          </DialogTitle>
-                          <DialogDescription>
-                            Enter student email addresses separated by commas or
-                            new lines. They will automatically get access the
-                            next time they sign in. No emails are sent.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="py-4">
-                          <Textarea
-                            placeholder="student1@university.edu, student2@university.edu"
-                            value={inviteEmails}
-                            onChange={(e) => setInviteEmails(e.target.value)}
-                            className="min-h-[150px]"
-                          />
-                        </div>
-                        <DialogFooter>
-                          <Button
-                            variant="outline"
-                            onClick={() => setIsInviteOpen(false)}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            onClick={handleInviteStudents}
-                            disabled={isInviting || !inviteEmails.trim()}
-                          >
-                            {isInviting ? "Adding..." : "Add Students"}
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
+                      <Link
+                        href={`/${orgId}/teacher/classrooms/${classroom.id}`}
+                      >
+                        View Details
+                        <ChevronRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

@@ -7,12 +7,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-const navItems = [
-  { label: "My Classrooms", href: "/student/classrooms" },
-  { label: "Active Program", href: "/student/classrooms/1/programs/1" },
-  { label: "Progress", href: "/student/progress" },
-];
-
 const progressRows = [
   {
     title: "Binary Search Tree Traversal",
@@ -31,7 +25,17 @@ const progressRows = [
   },
 ];
 
-export default function StudentProgressPage() {
+export default function StudentProgressPage({
+  params,
+}: {
+  params: { orgId: string };
+}) {
+  const { orgId } = params;
+  const navItems = [
+    { label: "My Classrooms", href: `/${orgId}/student` },
+    { label: "Progress", href: `/${orgId}/student/progress` },
+  ];
+
   return (
     <AppShell
       title="Progress Tracker"

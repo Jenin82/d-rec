@@ -52,7 +52,7 @@ export default function AdminSettingsPage() {
 
   const navItems = [
     { label: "Overview", href: `/${orgId}/admin` },
-    { label: "Teachers", href: `/${orgId}/admin/teachers` },
+    { label: "Users", href: `/${orgId}/admin/users` },
     { label: "Settings", href: `/${orgId}/admin/settings` },
   ];
 

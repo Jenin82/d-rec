@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { BookOpen, FileText, Clock } from "lucide-react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { BookOpen, Sparkles, GraduationCap } from "lucide-react";
 
+import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -12,241 +14,153 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { StatusBadge } from "@/components/status-badge";
-import { ProgressTracker } from "@/components/progress-tracker";
-import { useQuestionStore, type Program } from "@/stores/question-store";
-import { useAuthStore } from "@/stores/auth-store";
 import { supabase } from "@/lib/supabase/client";
+import { useAuthStore } from "@/stores/auth-store";
 
-type ProgramWithStatus = Program & { studentStatus: string };
+type Classroom = {
+  id: string;
+  name: string;
+  term: string | null;
+};
 
-export default function StudentDashboard({
-  params,
-}: {
-  params: { orgId: string };
-}) {
-  const { orgId } = params;
-  const { programs, fetchPrograms, isLoading } = useQuestionStore();
+export default function StudentClassroomsPage() {
+  const params = useParams();
+  const orgId = params.orgId as string;
   const user = useAuthStore((s) => s.user);
-  const [programStatuses, setProgramStatuses] = useState<
-    Record<string, string>
-  >({});
+
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const navItems = [
+    { label: "My Classrooms", href: `/${orgId}/student` },
+    { label: "Progress", href: `/${orgId}/student/progress` },
+  ];
 
   useEffect(() => {
-    fetchPrograms();
-  }, [fetchPrograms]);
-
-  useEffect(() => {
-    if (programs.length > 0 && user) {
-      loadStatuses();
-    }
-  }, [programs, user]);
-
-  async function loadStatuses() {
-    if (!user) return;
-    const statuses: Record<string, string> = {};
-
-    for (const program of programs) {
-      // Check for code submissions
-      const { data: codeSub } = await supabase
-        .from("code_submissions")
-        .select("status")
-        .eq("program_id", program.id)
-        .eq("student_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (codeSub?.status === "approved") {
-        statuses[program.id] = "final_approved";
-        continue;
-      }
-      if (codeSub?.status === "pending") {
-        statuses[program.id] = "code_submitted";
-        continue;
+    async function loadClassrooms() {
+      setIsLoading(true);
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        setIsLoading(false);
+        return;
       }
 
-      // Check for algorithm submissions
-      const { data: algoSub } = await supabase
-        .from("algorithm_submissions")
-        .select("status")
-        .eq("program_id", program.id)
-        .eq("student_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // Get classrooms where the student is a member
+      const { data, error } = await supabase
+        .from("classroom_members")
+        .select("classroom_id, classrooms(id, name, term)")
+        .eq("user_id", userData.user.id);
 
-      if (algoSub?.status === "approved") {
-        statuses[program.id] = "coding_stage";
-      } else if (algoSub?.status === "pending") {
-        statuses[program.id] = "algorithm_pending";
-      } else if (algoSub?.status === "rejected") {
-        statuses[program.id] = "algorithm_rejected";
-      } else {
-        statuses[program.id] = "not_started";
+      if (error) {
+        console.error("Error loading classrooms:", error);
+        setIsLoading(false);
+        return;
       }
+
+      const mapped = (data ?? [])
+        .map((row: any) => row.classrooms)
+        .filter(Boolean) as Classroom[];
+
+      setClassrooms(mapped);
+      setIsLoading(false);
     }
 
-    setProgramStatuses(statuses);
-  }
-
-  const approvedCount = Object.values(programStatuses).filter(
-    (s) => s === "final_approved",
-  ).length;
-  const inProgressCount = Object.values(programStatuses).filter(
-    (s) => s !== "not_started" && s !== "final_approved",
-  ).length;
+    loadClassrooms();
+  }, []);
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">
-          Welcome back
-          {user?.user_metadata?.full_name
-            ? `, ${user.user_metadata.full_name}`
-            : ""}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Here&apos;s your current progress across all questions
-        </p>
-      </div>
+    <AppShell
+      title={`Welcome back, ${user?.user_metadata?.full_name || "Student"}!`}
+      subtitle="Jump back into programs, algorithms, and your digital records."
+      navItems={navItems}
+    >
+      {/* Hero Welcome Banner */}
+      <section className="relative overflow-hidden rounded-xl border bg-card mb-8">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,oklch(0.95_0.04_200),transparent_50%)] dark:bg-[radial-gradient(ellipse_at_top_right,oklch(0.3_0.05_200),transparent_50%)] opacity-50" />
+        <div className="relative flex flex-col items-start gap-4 p-8 md:p-12">
+          <div className="inline-flex items-center gap-2 rounded-full border bg-background/50 backdrop-blur-sm px-3 py-1 text-xs text-muted-foreground shadow-sm">
+            <Sparkles className="h-3 w-3 text-primary" />
+            <span>Ready to code?</span>
+          </div>
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl text-foreground">
+            Your Digital Record Book
+          </h2>
+          <p className="max-w-2xl text-base text-muted-foreground">
+            Select a classroom below to work on assignments, submit your
+            algorithms, and compile your verified digital records.
+          </p>
+        </div>
+      </section>
 
-      {/* Quick Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/30">
-              <BookOpen className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{programs.length}</p>
-              <p className="text-xs text-muted-foreground">Total Questions</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-950/30">
-              <Clock className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{inProgressCount}</p>
-              <p className="text-xs text-muted-foreground">In Progress</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 p-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30">
-              <FileText className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{approvedCount}</p>
-              <p className="text-xs text-muted-foreground">Approved Records</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Classrooms Grid */}
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold flex items-center gap-2">
+          <GraduationCap className="h-5 w-5 text-primary" />
+          My Enrolled Classrooms
+        </h3>
 
-      {/* Approved records link */}
-      {approvedCount > 0 && (
-        <Button asChild variant="outline" className="gap-2">
-          <Link href={`/${orgId}/student/records`}>
-            <FileText className="h-4 w-4" />
-            View Approved Records ({approvedCount})
-          </Link>
-        </Button>
-      )}
-
-      {/* Questions List */}
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Available Questions</h3>
         {isLoading ? (
-          <div className="grid gap-4">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3].map((i) => (
               <Card key={i} className="animate-pulse">
-                <CardContent className="p-6">
-                  <div className="h-5 w-2/3 rounded bg-muted mb-2" />
-                  <div className="h-4 w-full rounded bg-muted" />
+                <CardHeader>
+                  <div className="h-5 w-1/2 rounded bg-muted mb-2" />
+                  <div className="h-4 w-1/3 rounded bg-muted" />
+                </CardHeader>
+                <CardContent>
+                  <div className="h-8 w-1/3 rounded bg-muted" />
                 </CardContent>
               </Card>
             ))}
           </div>
-        ) : programs.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center gap-3 py-12">
-              <BookOpen className="h-10 w-10 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">
-                No questions available yet. Your teacher will post assignments
-                soon.
+        ) : classrooms.length === 0 ? (
+          <Card className="flex flex-col items-center justify-center gap-4 border-dashed p-12 text-center text-muted-foreground">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <BookOpen className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="font-semibold text-foreground text-lg">
+                No classrooms yet
               </p>
-            </CardContent>
+              <p className="mt-1">
+                You haven&apos;t been added to any classrooms in this
+                organization.
+              </p>
+            </div>
           </Card>
         ) : (
-          <div className="grid gap-4">
-            {programs.map((program) => {
-              const status = programStatuses[program.id] ?? "not_started";
-              const metadata = program.metadata as
-                | Record<string, unknown>
-                | undefined;
-              const difficulty = (metadata?.difficulty as string) ?? "medium";
-
-              return (
-                <Card
-                  key={program.id}
-                  className="transition-shadow hover:shadow-md"
-                >
-                  <CardContent className="p-6">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-medium">{program.title}</h4>
-                          <Badge
-                            variant="secondary"
-                            className={`capitalize text-xs border-0 ${
-                              difficulty === "easy"
-                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30"
-                                : difficulty === "hard"
-                                  ? "bg-red-100 text-red-800 dark:bg-red-950/30"
-                                  : "bg-amber-100 text-amber-800 dark:bg-amber-950/30"
-                            }`}
-                          >
-                            {difficulty}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground line-clamp-1">
-                          {program.description ?? "No description"}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <StatusBadge status={status} />
-                        <Button asChild size="sm">
-                          <Link
-                            href={`/${orgId}/student/questions/${program.id}`}
-                          >
-                            {status === "not_started"
-                              ? "Start"
-                              : status === "final_approved"
-                                ? "View Record"
-                                : "Continue"}
-                          </Link>
-                        </Button>
-                      </div>
-                    </div>
-                    {status !== "not_started" && (
-                      <div className="mt-4 pt-4 border-t">
-                        <ProgressTracker status={status} />
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {classrooms.map((classroom) => (
+              <Card
+                key={classroom.id}
+                className="group transition-all hover:shadow-lg hover:border-primary/50 relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-primary/10 to-transparent rounded-bl-full transition-opacity opacity-0 group-hover:opacity-100" />
+                <CardHeader>
+                  <CardTitle className="text-xl group-hover:text-primary transition-colors">
+                    {classroom.name}
+                  </CardTitle>
+                  {classroom.term && (
+                    <CardDescription>{classroom.term}</CardDescription>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    asChild
+                    className="w-full sm:w-auto shadow-sm transition-all group-hover:shadow-md"
+                  >
+                    <Link
+                      href={`/${orgId}/student/classrooms/${classroom.id}/programs`}
+                    >
+                      Enter Classroom
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         )}
       </div>
-    </div>
+    </AppShell>
   );
 }

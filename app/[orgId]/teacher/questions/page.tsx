@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
@@ -25,12 +26,9 @@ const difficultyColor: Record<string, string> = {
   hard: "bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-400",
 };
 
-export default function QuestionsPage({
-  params,
-}: {
-  params: { orgId: string };
-}) {
-  const { orgId } = params;
+export default function QuestionsPage() {
+  const params = useParams();
+  const orgId = params.orgId as string;
   const { programs, fetchPrograms, isLoading } = useQuestionStore();
   const [search, setSearch] = useState("");
   const [orgName, setOrgName] = useState("Organization");

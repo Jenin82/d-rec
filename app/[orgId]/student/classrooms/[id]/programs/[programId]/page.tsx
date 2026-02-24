@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Editor from "@monaco-editor/react";
@@ -28,12 +28,6 @@ import {
 import { useAuthStore } from "@/stores/auth-store";
 import { supabase } from "@/lib/supabase/client";
 
-const navItems = [
-  { label: "My Classrooms", href: "/student/classrooms" },
-  { label: "Active Program", href: "/student/classrooms/1/programs/1" },
-  { label: "Progress", href: "/student/progress" },
-];
-
 const LANGUAGES = [
   { id: 63, name: "JavaScript", value: "javascript" },
   { id: 71, name: "Python", value: "python" },
@@ -46,13 +40,23 @@ export default function StudentProgramPage({
 }: {
   params: { orgId: string; id: string; programId: string };
 }) {
-  const { orgId, programId } = params;
+  const { orgId, programId, id } = params;
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
 
-  const [algorithm, setAlgorithm] = useState(
-    "1. Read input values\n2. Initialize traversal pointers\n3. Visit each node in-order\n4. Print result set",
-  );
+  const navItems = [
+    { label: "My Classrooms", href: `/${orgId}/student` },
+    {
+      label: "Classroom Programs",
+      href: `/${orgId}/student/classrooms/${id}/programs`,
+    },
+  ];
+
+  const [programDetails, setProgramDetails] = useState<{
+    title: string;
+    description: string | null;
+  } | null>(null);
+  const [algorithm, setAlgorithm] = useState("");
   const [code, setCode] = useState("// Write your code here");
   const [language, setLanguage] = useState(LANGUAGES[0]);
   const [output, setOutput] = useState("Awaiting execution run.");
@@ -61,6 +65,21 @@ export default function StudentProgramPage({
   const [aiFeedback, setAiFeedback] = useState<string | null>(null);
   const [isGettingFeedback, setIsGettingFeedback] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    async function loadProgram() {
+      const { data, error } = await supabase
+        .from("programs")
+        .select("title, description")
+        .eq("id", programId)
+        .single();
+
+      if (!error && data) {
+        setProgramDetails(data);
+      }
+    }
+    loadProgram();
+  }, [programId]);
 
   const handleRunCode = async () => {
     setIsExecuting(true);
@@ -110,7 +129,7 @@ export default function StudentProgramPage({
           code,
           language: language.name,
           description:
-            "Given a binary tree, print its nodes in-order. Ensure your algorithm takes into account empty trees and complex hierarchical structures.", // Mock problem description, should ideally come from Supabase DB.
+            programDetails?.description || "No description provided.",
         }),
       });
       const data = await response.json();
@@ -185,9 +204,13 @@ export default function StudentProgramPage({
         <Card className="h-full flex flex-col">
           <CardHeader className="flex flex-row items-start justify-between gap-3">
             <div className="space-y-1">
-              <CardTitle>Algorithm Editor</CardTitle>
-              <CardDescription>
-                Draft and revise the algorithm for approval.
+              <CardTitle>
+                {programDetails ? programDetails.title : "Algorithm Editor"}
+              </CardTitle>
+              <CardDescription className="max-h-[80px] overflow-y-auto">
+                {programDetails?.description
+                  ? programDetails.description
+                  : "Draft and revise the algorithm for approval."}
               </CardDescription>
             </div>
             <Badge variant="secondary">Approved</Badge>
