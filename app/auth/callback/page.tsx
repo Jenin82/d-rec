@@ -45,7 +45,7 @@ export default function AuthCallbackPage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,oklch(0.98_0.03_160),transparent_60%)]">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,oklch(0.95_0.04_200),oklch(0.98_0.01_200))] dark:bg-[radial-gradient(ellipse_at_top,oklch(0.2_0.04_200),oklch(0.1_0.01_200))]">
       <div className="mx-auto flex min-h-screen w-full max-w-lg items-center px-6 py-12">
         <div className="rounded-lg border border-dashed bg-background px-4 py-6 text-sm text-muted-foreground">
           Completing authentication...

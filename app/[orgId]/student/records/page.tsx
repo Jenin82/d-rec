@@ -18,8 +18,11 @@ type ApprovedRecord = {
   created_at: string;
 };
 
-export default function RecordsPage({ params }: { params: { orgId: string } }) {
-  const { orgId } = params;
+import { useParams } from "next/navigation";
+
+export default function RecordsPage() {
+  const params = useParams();
+  const orgId = params.orgId as string;
   const user = useAuthStore((s) => s.user);
   const [records, setRecords] = useState<ApprovedRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);

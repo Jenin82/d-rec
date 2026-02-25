@@ -28,12 +28,11 @@ type CodeSubmissionWithDetails = {
   algorithm_content?: string;
 };
 
-export default function CodeReviewPage({
-  params,
-}: {
-  params: { orgId: string };
-}) {
-  const { orgId } = params;
+import { useParams } from "next/navigation";
+
+export default function CodeReviewPage() {
+  const params = useParams();
+  const orgId = params.orgId as string;
   const [submissions, setSubmissions] = useState<CodeSubmissionWithDetails[]>(
     [],
   );

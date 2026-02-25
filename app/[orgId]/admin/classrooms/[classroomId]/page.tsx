@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Plus, Users, ArrowLeft, Trash2, Search } from "lucide-react";
+import { Plus, Users, ArrowLeft, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 
@@ -36,7 +36,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuestionStore } from "@/stores/question-store";
-import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Classroom = {
   id: string;
@@ -68,9 +75,25 @@ export default function AdminClassroomDetailsPage() {
   const [inviteEmails, setInviteEmails] = useState("");
   const [isInviting, setIsInviting] = useState(false);
 
+  // Add teachers state
+  const [isAddTeacherOpen, setIsAddTeacherOpen] = useState(false);
+  const [availableTeachers, setAvailableTeachers] = useState<any[]>([]);
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>("");
+  const [isAddingTeacher, setIsAddingTeacher] = useState(false);
+
+  // Question state
+  const [isQuestionDialogOpen, setIsQuestionDialogOpen] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<any>(null);
+  const [questionTitle, setQuestionTitle] = useState("");
+  const [questionDesc, setQuestionDesc] = useState("");
+  const [isSavingQuestion, setIsSavingQuestion] = useState(false);
+
   const {
     programs,
     fetchPrograms,
+    createProgram,
+    updateProgram,
+    deleteProgram,
     isLoading: isProgramsLoading,
   } = useQuestionStore();
 
@@ -88,6 +111,39 @@ export default function AdminClassroomDetailsPage() {
       fetchPrograms(classroomId);
     }
   }, [orgId, classroomId, fetchPrograms]);
+
+  useEffect(() => {
+    if (isAddTeacherOpen) {
+      fetchAvailableTeachers();
+    }
+  }, [isAddTeacherOpen, teachers]);
+
+  const fetchAvailableTeachers = async () => {
+    // get org members who are teachers/admins/owners
+    const { data: memberData } = await supabase
+      .from("organization_members")
+      .select("user_id, role")
+      .eq("organization_id", orgId)
+      .in("role", ["teacher", "admin", "owner"]);
+
+    if (memberData && memberData.length > 0) {
+      const userIds = memberData.map((m: any) => m.user_id);
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", userIds);
+
+      if (profileData) {
+        const existingTeacherIds = new Set(teachers.map((t) => t.id));
+        const available = profileData.filter(
+          (p) => !existingTeacherIds.has(p.id),
+        );
+        setAvailableTeachers(available);
+      }
+    } else {
+      setAvailableTeachers([]);
+    }
+  };
 
   async function loadClassroom() {
     const { data } = await supabase
@@ -193,6 +249,26 @@ export default function AdminClassroomDetailsPage() {
     setIsInviting(false);
   };
 
+  const handleAddTeacher = async () => {
+    if (!selectedTeacherId) return;
+    setIsAddingTeacher(true);
+    const { error } = await supabase.from("classroom_members").insert({
+      classroom_id: classroomId,
+      user_id: selectedTeacherId,
+      role: "teacher",
+    });
+
+    if (!error) {
+      toast.success("Teacher added to classroom.");
+      setIsAddTeacherOpen(false);
+      setSelectedTeacherId("");
+      loadMembers();
+    } else {
+      toast.error("Failed to add teacher.");
+    }
+    setIsAddingTeacher(false);
+  };
+
   const handleRemoveMember = async (
     userId: string,
     role: "student" | "teacher" | "admin" | "superadmin",
@@ -220,6 +296,66 @@ export default function AdminClassroomDetailsPage() {
       loadMembers();
     } else {
       toast.error("Failed to remove user");
+    }
+  };
+
+  const handleQuestionSubmit = async () => {
+    if (!questionTitle.trim()) {
+      toast.error("Title is required");
+      return;
+    }
+
+    setIsSavingQuestion(true);
+    if (editingQuestion) {
+      const updated = await updateProgram(editingQuestion.id, {
+        title: questionTitle,
+        description: questionDesc,
+      });
+      if (updated) {
+        toast.success("Question updated successfully.");
+        setIsQuestionDialogOpen(false);
+      } else {
+        toast.error("Failed to update question.");
+      }
+    } else {
+      const created = await createProgram({
+        title: questionTitle,
+        description: questionDesc,
+        status: "published",
+        classroom_id: classroomId,
+        metadata: {},
+      });
+      if (created) {
+        toast.success("Question created successfully.");
+        setIsQuestionDialogOpen(false);
+      } else {
+        toast.error("Failed to create question.");
+      }
+    }
+    setIsSavingQuestion(false);
+  };
+
+  const handleEditQuestion = (q: any) => {
+    setEditingQuestion(q);
+    setQuestionTitle(q.title);
+    setQuestionDesc(q.description || "");
+    setIsQuestionDialogOpen(true);
+  };
+
+  const handleOpenAddQuestion = () => {
+    setEditingQuestion(null);
+    setQuestionTitle("");
+    setQuestionDesc("");
+    setIsQuestionDialogOpen(true);
+  };
+
+  const handleDeleteQuestion = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this question?")) return;
+    const success = await deleteProgram(id);
+    if (success) {
+      toast.success("Question deleted");
+    } else {
+      toast.error("Failed to delete question");
     }
   };
 
@@ -356,11 +492,72 @@ export default function AdminClassroomDetailsPage() {
 
         <TabsContent value="teachers" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Teachers</CardTitle>
-              <CardDescription>
-                Teachers assigned to this classroom.
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Teachers</CardTitle>
+                <CardDescription>
+                  Teachers assigned to this classroom.
+                </CardDescription>
+              </div>
+              <Dialog
+                open={isAddTeacherOpen}
+                onOpenChange={setIsAddTeacherOpen}
+              >
+                <DialogTrigger asChild>
+                  <Button size="sm" className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Add Teacher
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add Teacher</DialogTitle>
+                    <DialogDescription>
+                      Assign an existing teacher from this organization to the
+                      classroom.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label>Select Teacher</Label>
+                      <Select
+                        value={selectedTeacherId}
+                        onValueChange={setSelectedTeacherId}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a teacher" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableTeachers.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.full_name || "Unknown"}
+                            </SelectItem>
+                          ))}
+                          {availableTeachers.length === 0 && (
+                            <SelectItem value="none" disabled>
+                              No available teachers found.
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsAddTeacherOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleAddTeacher}
+                      disabled={isAddingTeacher || !selectedTeacherId}
+                    >
+                      {isAddingTeacher ? "Adding..." : "Add Teacher"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -413,6 +610,66 @@ export default function AdminClassroomDetailsPage() {
                   Questions and assignments for this classroom.
                 </CardDescription>
               </div>
+              <Dialog
+                open={isQuestionDialogOpen}
+                onOpenChange={setIsQuestionDialogOpen}
+              >
+                <DialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    className="gap-2"
+                    onClick={handleOpenAddQuestion}
+                  >
+                    <Plus className="h-4 w-4" />
+                    New Question
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>
+                      {editingQuestion ? "Edit Question" : "Create Question"}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {editingQuestion
+                        ? "Modify the question details below."
+                        : "Add a new question or assignment to this classroom."}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label>Title</Label>
+                      <Input
+                        placeholder="E.g. Binary Search Tree Implementation"
+                        value={questionTitle}
+                        onChange={(e) => setQuestionTitle(e.target.value)}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Description</Label>
+                      <Textarea
+                        placeholder="Provide details for the question..."
+                        value={questionDesc}
+                        onChange={(e) => setQuestionDesc(e.target.value)}
+                        className="min-h-[100px]"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsQuestionDialogOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleQuestionSubmit}
+                      disabled={isSavingQuestion || !questionTitle.trim()}
+                    >
+                      {isSavingQuestion ? "Saving..." : "Save Question"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardHeader>
             <CardContent>
               {isProgramsLoading ? (
@@ -427,11 +684,33 @@ export default function AdminClassroomDetailsPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   {programs.map((p) => (
                     <Card key={p.id}>
-                      <CardHeader>
-                        <CardTitle className="text-base">{p.title}</CardTitle>
-                        <CardDescription className="line-clamp-2">
-                          {p.description || "No description"}
-                        </CardDescription>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-1 pr-4">
+                            <CardTitle className="text-base">
+                              {p.title}
+                            </CardTitle>
+                            <CardDescription className="line-clamp-2">
+                              {p.description || "No description"}
+                            </CardDescription>
+                          </div>
+                          <div className="flex -mt-2 -mr-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditQuestion(p)}
+                            >
+                              <Pencil className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteQuestion(p.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
                       </CardHeader>
                     </Card>
                   ))}

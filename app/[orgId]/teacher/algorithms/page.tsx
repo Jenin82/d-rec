@@ -20,12 +20,11 @@ import {
   type AlgorithmSubmission,
 } from "@/stores/submission-store";
 
-export default function AlgorithmReviewPage({
-  params,
-}: {
-  params: { orgId: string };
-}) {
-  const { orgId } = params;
+import { useParams } from "next/navigation";
+
+export default function AlgorithmReviewPage() {
+  const params = useParams();
+  const orgId = params.orgId as string;
   const {
     algorithmSubmissions,
     fetchAlgorithmSubmissions,

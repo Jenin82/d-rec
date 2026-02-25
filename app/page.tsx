@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
 import {
   BookOpen,
   Code2,
@@ -9,6 +10,7 @@ import {
   GraduationCap,
   Users,
 } from "lucide-react";
+import { ModeToggle } from "@/components/mode-toggle";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -55,7 +57,12 @@ const workflow = [
   "Print your digital record",
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
     <div className="min-h-screen">
       {/* Navbar */}
@@ -68,19 +75,28 @@ export default function LandingPage() {
             <span className="text-lg font-semibold">Digital Record</span>
           </Link>
           <div className="flex items-center gap-3">
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/login">Sign In</Link>
-            </Button>
-            <Button asChild size="sm">
-              <Link href="/signup">Get Started</Link>
-            </Button>
+            {user ? (
+              <Button asChild size="sm">
+                <Link href="/dashboard">Dashboard</Link>
+              </Button>
+            ) : (
+              <>
+                <Button asChild variant="ghost" size="sm">
+                  <Link href="/login">Sign In</Link>
+                </Button>
+                <Button asChild size="sm">
+                  <Link href="/signup">Get Started</Link>
+                </Button>
+              </>
+            )}
+            <ModeToggle />
           </div>
         </div>
       </nav>
 
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,oklch(0.95_0.04_200),transparent_70%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,oklch(0.95_0.04_200),transparent_70%)] dark:bg-[radial-gradient(ellipse_at_top,oklch(0.2_0.04_200),transparent_70%)]" />
         <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-8 px-6 py-24 text-center md:py-32">
           <div className="inline-flex items-center gap-2 rounded-full border bg-card px-4 py-1.5 text-xs text-muted-foreground shadow-sm">
             <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
@@ -102,18 +118,18 @@ export default function LandingPage() {
             and final submissions are compiled, tested, and archived.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
-            <Button asChild size="lg" className="gap-2 px-8">
-              <Link href="/signup">
-                <GraduationCap className="h-5 w-5" />
-                Student Sign Up
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="lg" className="gap-2 px-8">
-              <Link href="/signup">
-                <Users className="h-5 w-5" />
-                Teacher Sign Up
-              </Link>
-            </Button>
+            {user ? (
+              <Button asChild size="lg" className="gap-2 px-8">
+                <Link href="/dashboard">
+                  Go to Dashboard
+                  <ArrowRight className="h-5 w-5" />
+                </Link>
+              </Button>
+            ) : (
+              <Button asChild size="lg" className="gap-2 px-8">
+                <Link href="/signup">Get Started</Link>
+              </Button>
+            )}
           </div>
         </div>
       </section>
@@ -187,10 +203,9 @@ export default function LandingPage() {
                     className="flex items-center gap-3 rounded-lg border bg-card p-4"
                   >
                     <CheckCircle2
-                      className={`h-5 w-5 ${item.done
-                          ? "text-primary"
-                          : "text-muted-foreground/30"
-                        }`}
+                      className={`h-5 w-5 ${
+                        item.done ? "text-primary" : "text-muted-foreground/30"
+                      }`}
                     />
                     <span
                       className={
@@ -244,10 +259,16 @@ export default function LandingPage() {
               <span className="text-sm font-semibold">Digital Record</span>
             </div>
             <div className="flex items-center gap-6 text-xs text-muted-foreground">
-              <Link href="/login" className="hover:text-foreground transition-colors">
+              <Link
+                href="/login"
+                className="hover:text-foreground transition-colors"
+              >
                 Login
               </Link>
-              <Link href="/signup" className="hover:text-foreground transition-colors">
+              <Link
+                href="/signup"
+                className="hover:text-foreground transition-colors"
+              >
                 Register
               </Link>
             </div>
