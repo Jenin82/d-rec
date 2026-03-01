@@ -40,6 +40,7 @@ export default function StudentClassroomProgramsPage() {
   const navItems = [
     { label: "Dashboard", href: `/${orgId}/student` },
     { label: "My Classrooms", href: `/${orgId}/student/classrooms` },
+    { label: "Record Book", href: `/${orgId}/student/records` },
   ];
 
   useEffect(() => {

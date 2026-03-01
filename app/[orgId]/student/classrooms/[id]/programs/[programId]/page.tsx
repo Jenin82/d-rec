@@ -62,11 +62,13 @@ export default function StudentProgramPage() {
   const user = useAuthStore((s) => s.user);
 
   const navItems = [
-    { label: "My Classrooms", href: `/${orgId}/student` },
+    { label: "Dashboard", href: `/${orgId}/student` },
+    { label: "Classrooms", href: `/${orgId}/student/classrooms` },
     {
-      label: "Classroom Programs",
+      label: "Programs",
       href: `/${orgId}/student/classrooms/${classroomId}/programs`,
     },
+    { label: "Record Book", href: `/${orgId}/student/records` },
   ];
 
   const [programDetails, setProgramDetails] = useState<{
