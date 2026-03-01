@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 
 import { Providers } from "@/components/providers";
 import { Navbar } from "@/components/navbar";
@@ -65,6 +66,7 @@ export default function RootLayout({
           <Navbar />
           <Providers>{children}</Providers>
           <Toaster />
+          <Analytics />
         </ThemeProvider>
       </body>
     </html>
