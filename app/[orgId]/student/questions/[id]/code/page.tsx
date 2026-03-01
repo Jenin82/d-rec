@@ -2,7 +2,15 @@
 
 import { useState, useEffect } from "react";
 import Editor from "@monaco-editor/react";
-import { Play, RotateCcw, Save, CheckCircle2, ArrowLeft } from "lucide-react";
+import {
+  Play,
+  RotateCcw,
+  Save,
+  CheckCircle2,
+  ArrowLeft,
+  Maximize2,
+  Minimize2,
+} from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -63,6 +71,7 @@ const LANGUAGES = [
 export default function StudentCodePage() {
   const params = useParams();
   const router = useRouter();
+  const orgId = params.orgId as string;
   const programId = params.id as string;
   const user = useAuthStore((s) => s.user);
 
@@ -71,6 +80,13 @@ export default function StudentCodePage() {
   const [customInput, setCustomInput] = useState("");
   const [output, setOutput] = useState("");
   const [isCompiling, setIsCompiling] = useState(false);
+  const [fullscreenPane, setFullscreenPane] = useState<
+    "editor" | "output" | null
+  >(null);
+  const [questionTitle, setQuestionTitle] = useState("Code Editor");
+  const [questionDescription, setQuestionDescription] = useState<string | null>(
+    null,
+  );
 
   const [status, setStatus] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -85,6 +101,17 @@ export default function StudentCodePage() {
 
   async function loadSubmission() {
     setIsLoading(true);
+    const { data: programData } = await supabase
+      .from("programs")
+      .select("title, description")
+      .eq("id", programId)
+      .maybeSingle();
+
+    if (programData) {
+      setQuestionTitle(programData.title || "Code Editor");
+      setQuestionDescription(programData.description || null);
+    }
+
     const { data, error } = await supabase
       .from("code_submissions")
       .select("code, language, status")
@@ -209,7 +236,7 @@ export default function StudentCodePage() {
 
       if (newStatus === "approved") {
         setTimeout(() => {
-          router.push(`/student/records/${programId}`);
+          router.push(`/${orgId}/student/records/${programId}`);
         }, 1500);
       }
     }
@@ -230,6 +257,14 @@ export default function StudentCodePage() {
 
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col gap-4">
+      <div className="rounded-lg border bg-card p-4">
+        <h3 className="text-base font-semibold">{questionTitle}</h3>
+        <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+          {questionDescription ||
+            "No question description available for this assignment."}
+        </p>
+      </div>
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button
@@ -238,7 +273,7 @@ export default function StudentCodePage() {
             asChild
             className="h-8 w-8 shrink-0"
           >
-            <Link href={`/student/questions/${programId}`}>
+            <Link href={`/${orgId}/student/questions/${programId}`}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -329,12 +364,32 @@ export default function StudentCodePage() {
         <ResizablePanel defaultSize="65%">
           <div className="flex h-full flex-col">
             <div className="border-b px-4 py-2 font-semibold text-sm">
-              main.
-              {selectedLanguage.monaco === "python"
-                ? "py"
-                : selectedLanguage.monaco === "javascript"
-                  ? "js"
-                  : selectedLanguage.monaco}
+              <div className="flex items-center justify-between">
+                <span>
+                  main.
+                  {selectedLanguage.monaco === "python"
+                    ? "py"
+                    : selectedLanguage.monaco === "javascript"
+                      ? "js"
+                      : selectedLanguage.monaco}
+                </span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6"
+                  onClick={() =>
+                    setFullscreenPane((prev) =>
+                      prev === "editor" ? null : "editor",
+                    )
+                  }
+                >
+                  {fullscreenPane === "editor" ? (
+                    <Minimize2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              </div>
             </div>
             <div className="flex-1">
               <Editor
@@ -378,6 +433,22 @@ export default function StudentCodePage() {
               <div className="flex h-full flex-col">
                 <div className="border-y px-4 py-2 font-semibold text-sm flex justify-between items-center">
                   <span>Output Console</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    onClick={() =>
+                      setFullscreenPane((prev) =>
+                        prev === "output" ? null : "output",
+                      )
+                    }
+                  >
+                    {fullscreenPane === "output" ? (
+                      <Minimize2 className="h-3.5 w-3.5" />
+                    ) : (
+                      <Maximize2 className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
                 </div>
                 <div className="flex-1 bg-black text-green-400 p-4 font-mono text-sm overflow-auto whitespace-pre-wrap">
                   {output || "Output will appear here..."}
@@ -387,6 +458,68 @@ export default function StudentCodePage() {
           </ResizablePanelGroup>
         </ResizablePanel>
       </ResizablePanelGroup>
+
+      {fullscreenPane === "editor" && (
+        <div className="fixed inset-0 z-50 bg-background p-4">
+          <div className="flex h-full flex-col rounded-lg border bg-card">
+            <div className="flex items-center justify-between border-b px-4 py-2 text-sm font-semibold">
+              <span>Code Editor</span>
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-8 w-8"
+                onClick={() => setFullscreenPane(null)}
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="h-full overflow-hidden bg-zinc-950">
+              <Editor
+                height="100%"
+                language={selectedLanguage.monaco}
+                theme="vs-dark"
+                value={code}
+                onChange={(value) => setCode(value || "")}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  padding: { top: 16 },
+                  scrollBeyondLastLine: false,
+                  readOnly: isReadOnly,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fullscreenPane === "output" && (
+        <div className="fixed inset-0 z-50 bg-background p-4">
+          <div className="flex h-full flex-col gap-3 rounded-lg border bg-card p-4">
+            <div className="flex items-center justify-between text-sm font-semibold">
+              <span>Output Console</span>
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-8 w-8"
+                onClick={() => setFullscreenPane(null)}
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
+            </div>
+            <Textarea
+              placeholder="Enter input here..."
+              className="min-h-[120px]"
+              value={customInput}
+              onChange={(e) => setCustomInput(e.target.value)}
+              disabled={isReadOnly}
+            />
+            <div className="flex-1 rounded-lg bg-black p-4 font-mono text-sm whitespace-pre-wrap text-green-400 overflow-auto">
+              {output || "Output will appear here..."}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

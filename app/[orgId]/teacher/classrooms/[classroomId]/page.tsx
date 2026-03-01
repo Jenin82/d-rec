@@ -78,17 +78,8 @@ export default function TeacherClassroomDetailsPage() {
     { label: "Overview", href: `/${orgId}/teacher` },
     { label: "Classrooms", href: `/${orgId}/teacher/classrooms` },
     { label: "Questions", href: `/${orgId}/teacher/questions` },
-    { label: "Review Algorithms", href: `/${orgId}/teacher/algorithms` },
-    { label: "Review Code", href: `/${orgId}/teacher/code-review` },
+    { label: "Review Queue", href: `/${orgId}/teacher/reviews` },
   ];
-
-  useEffect(() => {
-    if (orgId && classroomId) {
-      loadClassroom();
-      loadMembers();
-      fetchPrograms(classroomId);
-    }
-  }, [orgId, classroomId, fetchPrograms]);
 
   async function loadClassroom() {
     const { data } = await supabase
@@ -113,12 +104,12 @@ export default function TeacherClassroomDetailsPage() {
       .select("user_id, role")
       .eq("classroom_id", classroomId);
 
-    let activeStudents: StudentRow[] = [];
-    let activeTeachers: StudentRow[] = [];
+    const activeStudents: StudentRow[] = [];
+    const activeTeachers: StudentRow[] = [];
 
     if (memberData && memberData.length > 0) {
       const userIds = memberData
-        .map((m: any) => m.user_id)
+        .map((m: { user_id: string | null; role: string }) => m.user_id)
         .filter((id) => id !== null);
 
       const { data: profileData } = await supabase
@@ -127,10 +118,10 @@ export default function TeacherClassroomDetailsPage() {
         .in("id", userIds);
 
       if (profileData) {
-        memberData.forEach((m: any) => {
-          const profile = profileData.find((p: any) => p.id === m.user_id);
+        memberData.forEach((m: { user_id: string | null; role: string }) => {
+          const profile = profileData.find((p) => p.id === m.user_id);
           const row: StudentRow = {
-            id: m.user_id,
+            id: m.user_id || "",
             full_name: profile?.full_name || "Unknown",
             email: "Active Member",
           };
@@ -149,20 +140,29 @@ export default function TeacherClassroomDetailsPage() {
       .select("id, email")
       .eq("classroom_id", classroomId);
 
-    let pendingStudents: StudentRow[] = [];
-    if (inviteData) {
-      pendingStudents = inviteData.map((inv: any) => ({
-        id: inv.id,
-        full_name: "Pending Invite",
-        email: inv.email,
-        isPending: true,
-      }));
-    }
+    const pendingStudents: StudentRow[] = (inviteData || []).map((inv) => ({
+      id: inv.id,
+      full_name: "Pending Invite",
+      email: inv.email,
+      isPending: true,
+    }));
 
     setStudents([...activeStudents, ...pendingStudents]);
     setTeachers(activeTeachers);
     setIsLoading(false);
   }
+
+  useEffect(() => {
+    if (orgId && classroomId) {
+      const timeoutId = window.setTimeout(() => {
+        loadClassroom();
+        loadMembers();
+        fetchPrograms(classroomId);
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [orgId, classroomId, fetchPrograms]);
 
   const handleInviteStudents = async () => {
     if (!inviteEmails.trim() || !classroom) return;

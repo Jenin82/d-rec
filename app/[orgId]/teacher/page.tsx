@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { toast } from "sonner";
 import {
   FileQuestion,
   BookCheck,
@@ -41,6 +40,14 @@ type RecentSubmission = {
   created_at: string;
 };
 
+type SubmissionRow = {
+  id: string;
+  status: string;
+  created_at: string;
+  student_id: string;
+  program_id: string;
+};
+
 export default function TeacherDashboard() {
   const routeParams = useParams();
   const orgId = routeParams.orgId as string;
@@ -59,12 +66,15 @@ export default function TeacherDashboard() {
     { label: "Overview", href: `/${orgId}/teacher` },
     { label: "Classrooms", href: `/${orgId}/teacher/classrooms` },
     { label: "Questions", href: `/${orgId}/teacher/questions` },
-    { label: "Review Algorithms", href: `/${orgId}/teacher/algorithms` },
-    { label: "Review Code", href: `/${orgId}/teacher/code-review` },
+    { label: "Review Queue", href: `/${orgId}/teacher/reviews` },
   ];
 
   useEffect(() => {
-    loadDashboardData();
+    const timeoutId = window.setTimeout(() => {
+      loadDashboardData();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
@@ -77,57 +87,122 @@ export default function TeacherDashboard() {
       .single();
     if (orgData) setOrgName(orgData.name);
 
-    // Load stats - ideally filtered by orgId in the future
-    const [programsRes, algoRes, codeRes, approvedRes] = await Promise.all([
-      supabase.from("programs").select("id", { count: "exact", head: true }),
-      supabase
-        .from("algorithm_submissions")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending"),
-      supabase
-        .from("code_submissions")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending"),
-      supabase
-        .from("code_submissions")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "approved"),
-    ]);
+    const { data: classrooms } = await supabase
+      .from("classrooms")
+      .select("id")
+      .eq("organization_id", orgId);
+
+    const classroomIds = (classrooms || []).map((classroom) => classroom.id);
+    if (classroomIds.length === 0) {
+      setStats({
+        totalQuestions: 0,
+        pendingAlgorithms: 0,
+        pendingCode: 0,
+        approved: 0,
+      });
+      setRecentSubmissions([]);
+      return;
+    }
+
+    const { data: programs } = await supabase
+      .from("programs")
+      .select("id, title")
+      .in("classroom_id", classroomIds);
+
+    const programRows = programs || [];
+    const programIds = programRows.map((program) => program.id);
+    const programTitleById = new Map(
+      programRows.map((program) => [program.id, program.title]),
+    );
+
+    if (programIds.length === 0) {
+      setStats({
+        totalQuestions: 0,
+        pendingAlgorithms: 0,
+        pendingCode: 0,
+        approved: 0,
+      });
+      setRecentSubmissions([]);
+      return;
+    }
+
+    const [algoRes, codeRes, approvedRes, recentAlgoRes, recentCodeRes] =
+      await Promise.all([
+        supabase
+          .from("algorithm_submissions")
+          .select("id", { count: "exact", head: true })
+          .in("program_id", programIds)
+          .eq("status", "pending"),
+        supabase
+          .from("code_submissions")
+          .select("id", { count: "exact", head: true })
+          .in("program_id", programIds)
+          .eq("status", "pending"),
+        supabase
+          .from("code_submissions")
+          .select("id", { count: "exact", head: true })
+          .in("program_id", programIds)
+          .eq("status", "approved"),
+        supabase
+          .from("algorithm_submissions")
+          .select("id, status, created_at, student_id, program_id")
+          .in("program_id", programIds)
+          .order("created_at", { ascending: false })
+          .limit(5),
+        supabase
+          .from("code_submissions")
+          .select("id, status, created_at, student_id, program_id")
+          .in("program_id", programIds)
+          .order("created_at", { ascending: false })
+          .limit(5),
+      ]);
 
     setStats({
-      totalQuestions: programsRes.count ?? 0,
+      totalQuestions: programIds.length,
       pendingAlgorithms: algoRes.count ?? 0,
       pendingCode: codeRes.count ?? 0,
       approved: approvedRes.count ?? 0,
     });
 
-    // Load recent algorithm submissions
-    const { data: recentAlgos } = await supabase
-      .from("algorithm_submissions")
-      .select("id, status, created_at, student_id, program_id")
-      .order("created_at", { ascending: false })
-      .limit(5);
+    const recentAlgos = recentAlgoRes.data;
+    const recentCodes = recentCodeRes.data;
 
-    // Load recent code submissions
-    const { data: recentCodes } = await supabase
-      .from("code_submissions")
-      .select("id, status, created_at, student_id, program_id")
-      .order("created_at", { ascending: false })
-      .limit(5);
+    const studentIds = Array.from(
+      new Set(
+        [...(recentAlgos || []), ...(recentCodes || [])].map(
+          (submission) => submission.student_id,
+        ),
+      ),
+    );
+
+    let studentNameById = new Map<string, string>();
+    if (studentIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", studentIds);
+
+      studentNameById = new Map(
+        (profiles || []).map((profile) => [
+          profile.id,
+          profile.full_name || "Student",
+        ]),
+      );
+    }
 
     const combined: RecentSubmission[] = [
-      ...(recentAlgos ?? []).map((a: any) => ({
+      ...(recentAlgos ?? []).map((a: SubmissionRow) => ({
         id: a.id,
-        student_name: "Student",
-        program_title: "Program",
+        student_name: studentNameById.get(a.student_id) || "Student",
+        program_title: programTitleById.get(a.program_id) || "Program",
         type: "algorithm" as const,
         status: a.status,
         created_at: a.created_at,
       })),
-      ...(recentCodes ?? []).map((c: any) => ({
+      ...(recentCodes ?? []).map((c: SubmissionRow) => ({
         id: c.id,
-        student_name: "Student",
-        program_title: "Program",
+        student_name: studentNameById.get(c.student_id) || "Student",
+        program_title: programTitleById.get(c.program_id) || "Program",
         type: "code" as const,
         status: c.status,
         created_at: c.created_at,
@@ -216,28 +291,15 @@ export default function TeacherDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card className="group cursor-pointer transition-shadow hover:shadow-md">
-            <Link href={`/${orgId}/teacher/algorithms`}>
+            <Link href={`/${orgId}/teacher/reviews`}>
               <CardContent className="flex items-center gap-3 p-6">
                 <BookCheck className="h-5 w-5 text-amber-500" />
                 <div>
-                  <p className="text-sm font-medium">Review Algorithms</p>
+                  <p className="text-sm font-medium">Review Queue</p>
                   <p className="text-xs text-muted-foreground">
-                    {stats.pendingAlgorithms} pending
-                  </p>
-                </div>
-              </CardContent>
-            </Link>
-          </Card>
-          <Card className="group cursor-pointer transition-shadow hover:shadow-md">
-            <Link href={`/${orgId}/teacher/code-review`}>
-              <CardContent className="flex items-center gap-3 p-6">
-                <Code2 className="h-5 w-5 text-violet-500" />
-                <div>
-                  <p className="text-sm font-medium">Review Code</p>
-                  <p className="text-xs text-muted-foreground">
-                    {stats.pendingCode} pending
+                    {stats.pendingAlgorithms + stats.pendingCode} pending
                   </p>
                 </div>
               </CardContent>
@@ -297,10 +359,11 @@ export default function TeacherDashboard() {
                         )}
                       </div>
                       <div>
-                        <p className="text-sm font-medium capitalize">
-                          {sub.type} Submission
+                        <p className="text-sm font-medium">
+                          {sub.program_title}
                         </p>
                         <p className="text-xs text-muted-foreground">
+                          {sub.student_name} •{" "}
                           {new Date(sub.created_at).toLocaleDateString()}
                         </p>
                       </div>

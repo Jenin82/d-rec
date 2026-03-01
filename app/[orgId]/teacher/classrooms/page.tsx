@@ -61,15 +61,8 @@ export default function ClassroomsPage() {
     { label: "Overview", href: `/${orgId}/teacher` },
     { label: "Classrooms", href: `/${orgId}/teacher/classrooms` },
     { label: "Questions", href: `/${orgId}/teacher/questions` },
-    { label: "Review Algorithms", href: `/${orgId}/teacher/algorithms` },
-    { label: "Review Code", href: `/${orgId}/teacher/code-review` },
+    { label: "Review Queue", href: `/${orgId}/teacher/reviews` },
   ];
-
-  useEffect(() => {
-    if (orgId) {
-      loadClassrooms();
-    }
-  }, [orgId]);
 
   async function loadClassrooms() {
     setIsLoading(true);
@@ -92,6 +85,16 @@ export default function ClassroomsPage() {
     }
     setIsLoading(false);
   }
+
+  useEffect(() => {
+    if (orgId) {
+      const timeoutId = window.setTimeout(() => {
+        loadClassrooms();
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [orgId]);
 
   const handleCreateClassroom = async () => {
     if (!orgId || !newClassName.trim()) return;

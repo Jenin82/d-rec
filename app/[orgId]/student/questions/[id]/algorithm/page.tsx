@@ -20,6 +20,7 @@ import { supabase } from "@/lib/supabase/client";
 export default function StudentAlgorithmPage() {
   const params = useParams();
   const router = useRouter();
+  const orgId = params.orgId as string;
   const programId = params.id as string;
   const user = useAuthStore((s) => s.user);
 
@@ -30,6 +31,10 @@ export default function StudentAlgorithmPage() {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [questionTitle, setQuestionTitle] = useState("Algorithm");
+  const [questionDescription, setQuestionDescription] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     if (user && programId) {
@@ -39,6 +44,17 @@ export default function StudentAlgorithmPage() {
 
   async function loadSubmission() {
     setIsLoading(true);
+    const { data: programData } = await supabase
+      .from("programs")
+      .select("title, description")
+      .eq("id", programId)
+      .maybeSingle();
+
+    if (programData) {
+      setQuestionTitle(programData.title || "Algorithm");
+      setQuestionDescription(programData.description || null);
+    }
+
     const { data, error } = await supabase
       .from("algorithm_submissions")
       .select("content, status")
@@ -58,15 +74,16 @@ export default function StudentAlgorithmPage() {
   const handleSaveDraft = async () => {
     if (!algorithm.trim() || !user) return;
     setIsSaving(true);
-    
-    const { error } = await supabase
-      .from("algorithm_submissions")
-      .upsert({
+
+    const { error } = await supabase.from("algorithm_submissions").upsert(
+      {
         program_id: programId,
         student_id: user.id,
         content: algorithm,
-        status: "draft"
-      }, { onConflict: "program_id, student_id" });
+        status: "draft",
+      },
+      { onConflict: "program_id, student_id" },
+    );
 
     if (!error) {
       setStatus("draft");
@@ -77,26 +94,27 @@ export default function StudentAlgorithmPage() {
   const handleSubmit = async () => {
     if (!algorithm.trim() || !user) return;
     setIsSubmitting(true);
-    
+
     // In a real app, this would change status to pending_review for teacher
     // For demo purposes, we'll automatically approve it or set to pending
     const newStatus = "approved"; // Auto-approve for demo
-    
-    const { error } = await supabase
-      .from("algorithm_submissions")
-      .upsert({
+
+    const { error } = await supabase.from("algorithm_submissions").upsert(
+      {
         program_id: programId,
         student_id: user.id,
         content: algorithm,
-        status: newStatus
-      }, { onConflict: "program_id, student_id" });
+        status: newStatus,
+      },
+      { onConflict: "program_id, student_id" },
+    );
 
     if (!error) {
       setStatus(newStatus);
       // Auto-redirect to code step if approved
       if (newStatus === "approved") {
         setTimeout(() => {
-          router.push(`/student/questions/${programId}/code`);
+          router.push(`/${orgId}/student/questions/${programId}/code`);
         }, 1500);
       }
     }
@@ -105,27 +123,56 @@ export default function StudentAlgorithmPage() {
 
   const handleGetAiHelp = async () => {
     if (!algorithm.trim()) {
-      setAiSuggestion("Please write some algorithm steps first before asking for suggestions.");
+      setAiSuggestion(
+        "Please write some algorithm steps first before asking for suggestions.",
+      );
+      return;
+    }
+
+    const questionText = (questionDescription || "").trim();
+    if (!questionText) {
+      setAiSuggestion(
+        "Question description is missing. Ask your teacher to add it before requesting AI review.",
+      );
       return;
     }
 
     setIsAiLoading(true);
-    // In a real app, this would call your Claude API route
-    // Here we simulate an AI review response
-    setTimeout(() => {
+    try {
+      const response = await fetch("/api/ai/assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "algorithm",
+          algorithm,
+          code: "",
+          language: "plain text",
+          description: questionText,
+          question: questionText,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setAiSuggestion(data.error || "Failed to get AI feedback.");
+        return;
+      }
+
+      setAiSuggestion(data.feedback || "No feedback received.");
+    } catch {
       setAiSuggestion(
-        "Your algorithm looks like a good start! Here are a few suggestions to improve it:\n\n" +
-        "1. **Initialize variables**: You mentioned 'count' but didn't state its initial value. It's best practice to specify `count = 0`.\n" +
-        "2. **Loop Condition**: Step 3 says 'Loop until end of array', try to be more precise like 'While index i < length of array'.\n" +
-        "3. **Edge Cases**: Consider adding a step at the beginning to check if the input array is empty.\n\n" +
-        "Keep going, you're on the right track!"
+        "Failed to fetch AI feedback. Ensure your API keys are configured and valid.",
       );
+    } finally {
       setIsAiLoading(false);
-    }, 1500);
+    }
   };
 
   if (isLoading) {
-    return <div className="flex justify-center p-8"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary"></div></div>;
+    return (
+      <div className="flex justify-center p-8">
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary"></div>
+      </div>
+    );
   }
 
   const isApproved = status === "approved";
@@ -136,25 +183,45 @@ export default function StudentAlgorithmPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" asChild className="h-8 w-8 shrink-0">
-            <Link href={`/student/questions/${programId}`}>
+          <Button
+            variant="outline"
+            size="icon"
+            asChild
+            className="h-8 w-8 shrink-0"
+          >
+            <Link href={`/${orgId}/student/questions/${programId}`}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
           <div>
             <h2 className="text-2xl font-bold tracking-tight">Algorithm</h2>
             <p className="text-muted-foreground">
-              {isApproved ? "Your algorithm was approved!" : isPending ? "Waiting for teacher review." : "Write your algorithm steps for teacher approval."}
+              {isApproved
+                ? "Your algorithm was approved!"
+                : isPending
+                  ? "Waiting for teacher review."
+                  : "Write your algorithm steps for teacher approval."}
             </p>
           </div>
         </div>
         {!isReadOnly && (
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-2" onClick={handleSaveDraft} disabled={isSaving || isSubmitting || !algorithm.trim()}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={handleSaveDraft}
+              disabled={isSaving || isSubmitting || !algorithm.trim()}
+            >
               <Save className="h-4 w-4" />
               {isSaving ? "Saving..." : "Save Draft"}
             </Button>
-            <Button size="sm" className="gap-2" onClick={handleSubmit} disabled={isSubmitting || isSaving || !algorithm.trim()}>
+            <Button
+              size="sm"
+              className="gap-2"
+              onClick={handleSubmit}
+              disabled={isSubmitting || isSaving || !algorithm.trim()}
+            >
               <CheckCircle2 className="h-4 w-4" />
               {isSubmitting ? "Submitting..." : "Submit for Approval"}
             </Button>
@@ -162,7 +229,7 @@ export default function StudentAlgorithmPage() {
         )}
         {isApproved && (
           <Button size="sm" className="gap-2" asChild>
-            <Link href={`/student/questions/${programId}/code`}>
+            <Link href={`/${orgId}/student/questions/${programId}/code`}>
               Proceed to Code Step <ArrowLeft className="h-4 w-4 rotate-180" />
             </Link>
           </Button>
@@ -171,11 +238,26 @@ export default function StudentAlgorithmPage() {
 
       <div className="grid gap-6 md:grid-cols-[1fr_350px]">
         <div className="flex flex-col gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>{questionTitle}</CardTitle>
+              <CardDescription>
+                Problem statement for this assignment.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                {questionDescription ||
+                  "No question description available for this assignment."}
+              </p>
+            </CardContent>
+          </Card>
           <Card className="flex-1">
             <CardHeader>
               <CardTitle>Algorithm Steps</CardTitle>
               <CardDescription>
-                Write clear, step-by-step instructions. You can use markdown for formatting.
+                Write clear, step-by-step instructions. You can use markdown for
+                formatting.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -202,12 +284,14 @@ export default function StudentAlgorithmPage() {
               <div className="rounded-lg bg-muted p-3 text-sm text-muted-foreground flex gap-2">
                 <Info className="h-4 w-4 shrink-0 mt-0.5" />
                 <p>
-                  Stuck or want to improve your logic? The AI can review your current steps and offer hints (it won't write the answer for you).
+                  Stuck or want to improve your logic? The AI can review your
+                  current steps and offer hints (it won&apos;t write the answer
+                  for you).
                 </p>
               </div>
-              <Button 
-                variant="secondary" 
-                className="w-full" 
+              <Button
+                variant="secondary"
+                className="w-full"
                 onClick={handleGetAiHelp}
                 disabled={isAiLoading || isReadOnly || !algorithm.trim()}
               >

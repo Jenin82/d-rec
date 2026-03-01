@@ -37,14 +37,8 @@ export default function QuestionsPage() {
     { label: "Overview", href: `/${orgId}/teacher` },
     { label: "Classrooms", href: `/${orgId}/teacher/classrooms` },
     { label: "Questions", href: `/${orgId}/teacher/questions` },
-    { label: "Review Algorithms", href: `/${orgId}/teacher/algorithms` },
-    { label: "Review Code", href: `/${orgId}/teacher/code-review` },
+    { label: "Review Queue", href: `/${orgId}/teacher/reviews` },
   ];
-
-  useEffect(() => {
-    fetchPrograms();
-    loadOrgDetails();
-  }, [fetchPrograms, orgId]);
 
   async function loadOrgDetails() {
     if (!orgId) return;
@@ -55,6 +49,15 @@ export default function QuestionsPage() {
       .single();
     if (orgData) setOrgName(orgData.name);
   }
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      fetchPrograms();
+      loadOrgDetails();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchPrograms, orgId]);
 
   const filtered = programs.filter(
     (p) =>
