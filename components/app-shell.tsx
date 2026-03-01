@@ -3,7 +3,6 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ModeToggle } from "./mode-toggle";
 
 type NavItem = {
   label: string;
@@ -42,7 +41,6 @@ export function AppShell({
 
             <div className="flex items-center gap-2 pr-4 sm:pr-8">
               {actions}
-              <ModeToggle />
             </div>
           </div>
         </header>

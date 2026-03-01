@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building, Plus, LogOut, Loader2, ArrowRight } from "lucide-react";
-import { ModeToggle } from "@/components/mode-toggle";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -168,7 +167,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,oklch(0.95_0.04_200),oklch(0.98_0.01_200))] dark:bg-[radial-gradient(ellipse_at_top,oklch(0.2_0.04_200),oklch(0.1_0.01_200))]">
+    <div className="flex-1 bg-[radial-gradient(ellipse_at_top,oklch(0.95_0.04_200),oklch(0.98_0.01_200))] dark:bg-[radial-gradient(ellipse_at_top,oklch(0.2_0.04_200),oklch(0.1_0.01_200))]">
       <div className="mx-auto max-w-5xl px-6 py-12">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -238,16 +237,6 @@ export default function DashboardPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-
-            <Button
-              variant="ghost"
-              onClick={handleSignOut}
-              className="gap-2 text-muted-foreground"
-            >
-              <LogOut className="h-4 w-4" />
-              Sign Out
-            </Button>
-            <ModeToggle />
           </div>
         </div>
 

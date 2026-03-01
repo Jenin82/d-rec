@@ -7,10 +7,7 @@ import {
   Printer,
   ArrowRight,
   CheckCircle2,
-  GraduationCap,
-  Users,
 } from "lucide-react";
-import { ModeToggle } from "@/components/mode-toggle";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -65,35 +62,6 @@ export default async function LandingPage() {
 
   return (
     <div className="min-h-screen">
-      {/* Navbar */}
-      <nav className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <BookOpen className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-semibold">Digital Record</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            {user ? (
-              <Button asChild size="sm">
-                <Link href="/dashboard">Dashboard</Link>
-              </Button>
-            ) : (
-              <>
-                <Button asChild variant="ghost" size="sm">
-                  <Link href="/login">Sign In</Link>
-                </Button>
-                <Button asChild size="sm">
-                  <Link href="/signup">Get Started</Link>
-                </Button>
-              </>
-            )}
-            <ModeToggle />
-          </div>
-        </div>
-      </nav>
-
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,oklch(0.95_0.04_200),transparent_70%)] dark:bg-[radial-gradient(ellipse_at_top,oklch(0.2_0.04_200),transparent_70%)]" />
@@ -103,11 +71,11 @@ export default async function LandingPage() {
             Academic Platform for Structured Learning
           </div>
           <h1 className="max-w-4xl text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
-            <span className="bg-gradient-to-r from-primary via-blue-600 to-primary bg-clip-text text-transparent">
+            <span className="bg-linear-to-r from-primary via-blue-600 to-primary bg-clip-text text-transparent">
               Build.
             </span>{" "}
             Code.{" "}
-            <span className="bg-gradient-to-r from-primary via-blue-600 to-primary bg-clip-text text-transparent">
+            <span className="bg-linear-to-r from-primary via-blue-600 to-primary bg-clip-text text-transparent">
               Compile.
             </span>{" "}
             Record.

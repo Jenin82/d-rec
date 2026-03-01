@@ -105,8 +105,8 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,oklch(0.95_0.04_200),oklch(0.98_0.01_200))] dark:bg-[radial-gradient(ellipse_at_top,oklch(0.2_0.04_200),oklch(0.1_0.01_200))]">
-      <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-6 py-12">
+    <div className="flex-1 bg-[radial-gradient(ellipse_at_top,oklch(0.95_0.04_200),oklch(0.98_0.01_200))] dark:bg-[radial-gradient(ellipse_at_top,oklch(0.2_0.04_200),oklch(0.1_0.01_200))]">
+      <div className="mx-auto flex h-[calc(100vh-4rem)] w-full max-w-3xl items-center px-6 py-12">
         <Card className="w-full">
           <CardHeader>
             <CardTitle>Profile</CardTitle>

@@ -492,11 +492,6 @@ export default function StudentProgramPage() {
       title="Program Workspace"
       subtitle="Draft the algorithm, write code, and review outputs before submission."
       navItems={navItems}
-      actions={
-        <Button asChild size="sm" variant="outline">
-          <Link href={`/${orgId}/student/progress`}>View Progress</Link>
-        </Button>
-      }
     >
       <Card>
         <CardHeader>
