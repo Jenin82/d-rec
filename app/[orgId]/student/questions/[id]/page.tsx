@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
-import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth-store";
 
 type ProgramDetails = {
@@ -25,7 +25,7 @@ type ProgramDetails = {
 
 function normalizeStatus(status: string | null) {
   if (!status) return "not_started";
-  if (status === "pending_review" || status === "pending") return "pending";
+  if (status === "pending" || status === "pending") return "pending";
   return status;
 }
 
@@ -47,7 +47,7 @@ export default function QuestionDetailPage() {
       if (!programId) return;
       setIsLoading(true);
 
-      const { data: programData } = await supabase
+      const { data: programData } = await api
         .from("programs")
         .select("title, description")
         .eq("id", programId)
@@ -60,7 +60,7 @@ export default function QuestionDetailPage() {
       if (user?.id) {
         const [{ data: algorithmSubmission }, { data: codeSubmission }] =
           await Promise.all([
-            supabase
+            api
               .from("algorithm_submissions")
               .select("status")
               .eq("program_id", programId)
@@ -68,7 +68,7 @@ export default function QuestionDetailPage() {
               .order("created_at", { ascending: false })
               .limit(1)
               .maybeSingle(),
-            supabase
+            api
               .from("code_submissions")
               .select("status")
               .eq("program_id", programId)

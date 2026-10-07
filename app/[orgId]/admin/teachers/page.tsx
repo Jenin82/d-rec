@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api-client";
+import { sessionClient as auth } from "@/lib/auth-client";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -67,7 +68,7 @@ export default function AdminTeachersPage() {
     setIsLoading(true);
 
     // Fetch active members who can be teachers
-    const { data: memberData } = await supabase
+    const { data: memberData } = await api
       .from("organization_members")
       .select("user_id, role")
       .eq("organization_id", orgId)
@@ -79,7 +80,7 @@ export default function AdminTeachersPage() {
         .map((m: any) => m.user_id)
         .filter((id: any): id is string => id !== null);
 
-      const { data: profileData } = await supabase
+      const { data: profileData } = await api
         .from("profiles")
         .select("id, full_name, role")
         .in("id", userIds);
@@ -94,7 +95,7 @@ export default function AdminTeachersPage() {
     }
 
     // Fetch pending invites
-    const { data: inviteData } = await supabase
+    const { data: inviteData } = await api
       .from("org_invites")
       .select("id, email, role")
       .eq("organization_id", orgId)
@@ -123,7 +124,7 @@ export default function AdminTeachersPage() {
       .map((e) => e.trim())
       .filter((e) => e.length > 0);
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await auth.getUser();
 
     const invites = emails.map((email) => ({
       organization_id: orgId,
@@ -132,10 +133,10 @@ export default function AdminTeachersPage() {
       invited_by: userData.user?.id,
     }));
 
-    const { error } = await supabase.from("org_invites").insert(invites);
+    const { error } = await api.from("org_invites").insert(invites);
 
     if (!error) {
-      toast.success(`${emails.length} teacher invite(s) sent successfully.`);
+      toast.success(`${emails.length} teacher invitation(s) created. Users can claim them after verifying their email and opening the dashboard.`);
       setBulkEmails("");
       setIsDialogOpen(false);
     } else {
@@ -153,14 +154,14 @@ export default function AdminTeachersPage() {
 
     if (teacher?.isPending) {
       // Remove from invites
-      const { error: inviteError } = await supabase
+      const { error: inviteError } = await api
         .from("org_invites")
         .delete()
         .eq("id", teacherId);
       error = inviteError;
     } else {
       // Remove from members
-      const { error: memberError } = await supabase
+      const { error: memberError } = await api
         .from("organization_members")
         .delete()
         .eq("organization_id", orgId)

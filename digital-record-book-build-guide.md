@@ -1,92 +1,21 @@
-# Digital Record - Flow & Path Documentation
+# Digital Record: flows and routes
 
-This document outlines the high-level role-based access control (RBAC), the authentication flow, and lists all available paths in the Digital Record application.
+See [README.md](README.md) for the Cloudflare runtime, fresh D1 setup, credentials and deployment instructions.
 
-## 1. Authentication & Organization Selection Flow
+Users sign up at `/signup` with email/password and a six-digit verification code, or use Google login. `/login` and `/forgot-password` handle sign-in and recovery. Better Auth handles provider callbacks at `/api/auth/callback/google`; `/auth/callback` preserves the application return flow.
 
-1. **Sign Up / Login** (`/signup` or `/login`):
-   - Users authenticate via Email/Password (with OTP verification) or Google OAuth.
-   - Upon successful authentication, all users are redirected to `/dashboard`.
-   - **Note**: The global `role` field in the `profiles` table is now treated as a default fallback. True access control is managed per-organization.
+The `/dashboard` lists organizations and creates a new organization with an owner membership atomically. `/profile` edits the current profile and manages private R2 avatars. Membership roles belong to individual organizations; the selected organization is only a UI convenience.
 
-2. **Dashboard** (`/dashboard`):
-   - Displays a list of all organizations the user belongs to.
-   - Users can see their specific role (`owner`, `admin`, `teacher`, or `student`) for each organization.
-   - If a user has no organizations, they can create a new one (becoming the `owner`).
-   - Clicking an organization saves the context (e.g., in localStorage `selected_org_id`) and routes the user to the appropriate workspace based on their role in *that* organization:
-     - `owner` or `admin` -> `/admin`
-     - `teacher` -> `/teacher`
-     - `student` -> `/student`
+All role workspaces include the organization ID:
 
-3. **Proxy / Middleware** (`/proxy.ts`):
-   - Protects all authenticated routes.
-   - Redirects unauthenticated users to `/login`.
-   - Ensures authenticated users trying to access root `/` or role-specific paths directly without an active session are routed to `/dashboard` to select their organization context.
+- `/{orgId}/admin`: users, teachers, students, classrooms and settings.
+- `/{orgId}/teacher`: classroom visibility across the organization, assignment creation and review management for assigned classrooms. `/teacher/reviews` is the review queue; legacy algorithm/code review routes redirect there.
+- `/{orgId}/student`: assigned classrooms, questions, progress and completed records. The canonical editor is `/{orgId}/student/classrooms/{classroomId}/programs/{programId}`; legacy question editors redirect there.
 
----
+Student algorithms move from draft to pending teacher review. Only an approved algorithm permits final code submission. Pending/approved work is frozen until explicit reopening, which clears both reviews and completed-record eligibility. Version checks prevent stale overwrites. AI provides hints only; Judge0 executes supported code, and teacher decisions determine approval.
 
-## 2. Role Capabilities (Per Organization)
+Invitations have expiry and are claimed on the dashboard using the user's verified email. Invitations do not send notification emails; share the signup link separately. Verification and recovery email use the configured sender.
 
-### Owner & Admin
-- Have full control over the organization.
-- Can invite/remove teachers via the Admin Dashboard.
-- **Path**: `/admin/*`
+Server operations use `/api/resources/{table}` with allowlisted DTOs, filters and server authorization; organization creation and invitation claiming use `/api/organizations` and `/api/invites/accept`. Reopening uses `/api/programs/{programId}/reopen`. `/api/ai/assist`, `/api/execute` and `/api/profile/avatar` enforce sessions, resource access and bounded usage. The browser has no D1 or R2 credentials.
 
-### Teacher
-- Can view classrooms within the selected organization.
-- Can create new classrooms.
-- Can bulk invite students to specific classrooms.
-- Can create and post programming questions (Algorithms/Code assignments).
-- Can review student submissions (Algorithms and Code).
-- **Path**: `/teacher/*`
-
-### Student
-- Automatically added to classrooms upon signup if invited.
-- Can view assigned questions.
-- Must submit an algorithm step for approval first.
-- Can use an AI assistant for hints on their algorithm.
-- Upon algorithm approval, can access the Monaco-based code editor.
-- Can write, compile, test, and submit code using the Judge0 API.
-- **Path**: `/student/*`
-
----
-
-## 3. Application Paths
-
-### Public / Authentication
-- `/` - Landing page (redirects to dashboard if logged in)
-- `/login` - Login page
-- `/signup` - Signup page with OTP verification
-- `/auth/callback` - OAuth callback handler
-
-### Shared Authenticated
-- `/dashboard` - Central hub for Organization selection and creation
-- `/profile` - User profile management
-
-### Admin Workspace
-- `/admin` - Admin overview/dashboard
-- `/admin/teachers` - Manage organization teachers (invite/remove)
-- `/admin/classrooms` - View all classrooms (Admin view)
-- `/admin/students` - View all students (Admin view)
-
-### Teacher Workspace
-- `/teacher` - Teacher overview/dashboard
-- `/teacher/classrooms` - Manage classrooms and invite students
-- `/teacher/questions` - View posted questions
-- `/teacher/questions/new` - Create a new programming question
-- `/teacher/algorithms` - Review student algorithm submissions
-- `/teacher/code-review` - Review student code submissions
-
-### Student Workspace
-- `/student` - Student overview/dashboard
-- `/student/classrooms` - View enrolled classrooms
-- `/student/questions` - View assigned questions
-- `/student/questions/[id]` - View question details and progress
-- `/student/questions/[id]/algorithm` - Write and submit algorithm (with AI help)
-- `/student/questions/[id]/code` - Write, compile, and submit code (Monaco + Judge0)
-- `/student/progress` - Overall student progress
-- `/student/records` - List of completed digital records
-- `/student/records/[id]` - View a specific completed digital record
-
-### API Routes
-- `/api/execute` - Handles secure code compilation and execution via Judge0 API.
+Single and full record PDFs are generated and downloaded in the browser. R2 stores profile avatars only.

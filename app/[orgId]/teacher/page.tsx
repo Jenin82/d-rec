@@ -22,7 +22,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
-import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api-client";
 
 type Stats = {
   totalQuestions: number;
@@ -80,14 +80,14 @@ export default function TeacherDashboard() {
 
   async function loadDashboardData() {
     // Load Org Name
-    const { data: orgData } = await supabase
+    const { data: orgData } = await api
       .from("organizations")
       .select("name")
       .eq("id", orgId)
       .single();
     if (orgData) setOrgName(orgData.name);
 
-    const { data: classrooms } = await supabase
+    const { data: classrooms } = await api
       .from("classrooms")
       .select("id")
       .eq("organization_id", orgId);
@@ -104,7 +104,7 @@ export default function TeacherDashboard() {
       return;
     }
 
-    const { data: programs } = await supabase
+    const { data: programs } = await api
       .from("programs")
       .select("id, title")
       .in("classroom_id", classroomIds);
@@ -128,28 +128,28 @@ export default function TeacherDashboard() {
 
     const [algoRes, codeRes, approvedRes, recentAlgoRes, recentCodeRes] =
       await Promise.all([
-        supabase
+        api
           .from("algorithm_submissions")
           .select("id", { count: "exact", head: true })
           .in("program_id", programIds)
           .eq("status", "pending"),
-        supabase
+        api
           .from("code_submissions")
           .select("id", { count: "exact", head: true })
           .in("program_id", programIds)
           .eq("status", "pending"),
-        supabase
+        api
           .from("code_submissions")
           .select("id", { count: "exact", head: true })
           .in("program_id", programIds)
           .eq("status", "approved"),
-        supabase
+        api
           .from("algorithm_submissions")
           .select("id, status, created_at, student_id, program_id")
           .in("program_id", programIds)
           .order("created_at", { ascending: false })
           .limit(5),
-        supabase
+        api
           .from("code_submissions")
           .select("id, status, created_at, student_id, program_id")
           .in("program_id", programIds)
@@ -177,7 +177,7 @@ export default function TeacherDashboard() {
 
     let studentNameById = new Map<string, string>();
     if (studentIds.length > 0) {
-      const { data: profiles } = await supabase
+      const { data: profiles } = await api
         .from("profiles")
         .select("id, full_name")
         .in("id", studentIds);

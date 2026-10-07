@@ -15,7 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
-import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api-client";
 
 type ReviewItem = {
   key: string;
@@ -50,7 +50,7 @@ export default function TeacherReviewQueuePage() {
 
   async function loadOrgDetails() {
     if (!orgId) return;
-    const { data: orgData } = await supabase
+    const { data: orgData } = await api
       .from("organizations")
       .select("name")
       .eq("id", orgId)
@@ -65,7 +65,7 @@ export default function TeacherReviewQueuePage() {
     if (!orgId) return;
     if (showLoading) setIsLoading(true);
 
-    const { data: classrooms } = await supabase
+    const { data: classrooms } = await api
       .from("classrooms")
       .select("id, name")
       .eq("organization_id", orgId);
@@ -87,7 +87,7 @@ export default function TeacherReviewQueuePage() {
       return;
     }
 
-    const { data: programs } = await supabase
+    const { data: programs } = await api
       .from("programs")
       .select("id, title, description, classroom_id")
       .in("classroom_id", classroomIds);
@@ -108,13 +108,13 @@ export default function TeacherReviewQueuePage() {
     }
 
     const [{ data: algorithmSubs }, { data: codeSubs }] = await Promise.all([
-      supabase
+      api
         .from("algorithm_submissions")
         .select("id, program_id, student_id, status, created_at")
         .in("program_id", programIds)
         .eq("status", "pending")
         .order("created_at", { ascending: false }),
-      supabase
+      api
         .from("code_submissions")
         .select("id, program_id, student_id, status, created_at")
         .in("program_id", programIds)
@@ -132,7 +132,7 @@ export default function TeacherReviewQueuePage() {
 
     let profileById = new Map<string, string>();
     if (studentIds.length > 0) {
-      const { data: profiles } = await supabase
+      const { data: profiles } = await api
         .from("profiles")
         .select("id, full_name")
         .in("id", studentIds);

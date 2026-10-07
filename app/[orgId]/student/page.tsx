@@ -14,7 +14,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api-client";
+import { sessionClient as auth } from "@/lib/auth-client";
 import { useAuthStore } from "@/stores/auth-store";
 
 type Classroom = {
@@ -39,17 +40,17 @@ export default function StudentClassroomsPage() {
   useEffect(() => {
     async function loadClassrooms() {
       setIsLoading(true);
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData } = await auth.getUser();
       if (!userData.user) {
         setIsLoading(false);
         return;
       }
 
       // Get classrooms where the student is a member
-      const { data, error } = await supabase
-        .from("classroom_members")
-        .select("classroom_id, classrooms(id, name, term)")
-        .eq("user_id", userData.user.id);
+      const { data, error } = await api
+        .from("classrooms")
+        .select("id, name, term")
+        .eq("organization_id", orgId);
 
       if (error) {
         console.error("Error loading classrooms:", error);
@@ -57,16 +58,14 @@ export default function StudentClassroomsPage() {
         return;
       }
 
-      const mapped = (data ?? [])
-        .map((row: any) => row.classrooms)
-        .filter(Boolean) as Classroom[];
+      const mapped = (data ?? []) as Classroom[];
 
       setClassrooms(mapped);
       setIsLoading(false);
     }
 
     loadClassrooms();
-  }, []);
+  }, [orgId]);
 
   return (
     <AppShell

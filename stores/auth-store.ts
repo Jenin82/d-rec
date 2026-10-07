@@ -1,22 +1,11 @@
-import { create, type StateCreator } from "zustand";
-
-import type { Session, User } from "@supabase/supabase-js";
-
+import { create } from "zustand";
+import type { AuthUser, AuthSession } from "@/lib/auth-client";
 export type AuthState = {
-  user: User | null;
-  session: Session | null;
-  isLoading: boolean;
-  setSession: (session: Session | null) => void;
-  setLoading: (value: boolean) => void;
+  user: AuthUser | null; session: AuthSession | null; isLoading: boolean;
+  setSession: (session: AuthSession | null) => void; setLoading: (value: boolean) => void;
 };
-
-const createAuthStore: StateCreator<AuthState> = (set) => ({
-  user: null,
-  session: null,
-  isLoading: true,
-  setSession: (session) =>
-    set({ session, user: session?.user ?? null, isLoading: false }),
+export const useAuthStore = create<AuthState>((set) => ({
+  user: null, session: null, isLoading: true,
+  setSession: (session) => set({ session, user: session?.user ?? null, isLoading: false }),
   setLoading: (isLoading) => set({ isLoading }),
-});
-
-export const useAuthStore = create<AuthState>(createAuthStore);
+}));

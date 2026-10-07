@@ -1,6 +1,7 @@
+import { captureCacheContext } from "@/lib/client-cache-context";
 import { create } from "zustand";
 
-import { supabase } from "@/lib/supabase/client";
+import { api, organizationProgramIds } from "@/lib/api-client";
 
 export type Program = {
   id: string;
@@ -17,7 +18,7 @@ type QuestionState = {
   programs: Program[];
   isLoading: boolean;
   error: string | null;
-  fetchPrograms: (classroomId?: string) => Promise<void>;
+  fetchPrograms: (classroomId?: string, orgId?: string) => Promise<void>;
   fetchProgramById: (id: string) => Promise<Program | null>;
   createProgram: (
     program: Omit<Program, "id" | "created_at" | "updated_at">,
@@ -34,16 +35,24 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
   isLoading: false,
   error: null,
 
-  fetchPrograms: async (classroomId?: string) => {
-    set({ isLoading: true, error: null });
-    let query = supabase
+  fetchPrograms: async (classroomId?: string, orgId?: string) => {
+    const isCurrent = captureCacheContext();
+    set({ programs: [], isLoading: true, error: null });
+    let query = api
       .from("programs")
       .select("*")
       .order("created_at", { ascending: false });
     if (classroomId) {
       query = query.eq("classroom_id", classroomId);
     }
+    if (orgId) {
+      const ids = await organizationProgramIds(orgId);
+      if (!isCurrent()) return;
+      if (ids.error) { set({ error: ids.error.message, isLoading: false }); return; }
+      query = query.in("id", ids.data || []);
+    }
     const { data, error } = await query;
+    if (!isCurrent()) return;
     if (error) {
       set({ error: error.message, isLoading: false });
       return;
@@ -52,35 +61,41 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
   },
 
   fetchProgramById: async (id: string) => {
-    const { data, error } = await supabase
+    const isCurrent = captureCacheContext();
+    const { data, error } = await api
       .from("programs")
       .select("*")
       .eq("id", id)
       .single();
-    if (error) return null;
+    if (!isCurrent()) return null;
+    if (error) { set({ error: error.message }); return null; }
     return data as unknown as Program;
   },
 
   createProgram: async (program) => {
-    const { data, error } = await supabase
+    const isCurrent = captureCacheContext();
+    const { data, error } = await api
       .from("programs")
       .insert(program as never)
       .select()
       .single();
-    if (error) return null;
+    if (!isCurrent()) return null;
+    if (error) { set({ error: error.message }); return null; }
     const newProgram = data as unknown as Program;
     set((state) => ({ programs: [newProgram, ...state.programs] }));
     return newProgram;
   },
 
   updateProgram: async (id, updates) => {
-    const { data, error } = await supabase
+    const isCurrent = captureCacheContext();
+    const { data, error } = await api
       .from("programs")
       .update(updates as never)
       .eq("id", id)
       .select()
       .single();
-    if (error) return null;
+    if (!isCurrent()) return null;
+    if (error) { set({ error: error.message }); return null; }
     const updatedProgram = data as unknown as Program;
     set((state) => ({
       programs: state.programs.map((p) => (p.id === id ? updatedProgram : p)),
@@ -89,8 +104,10 @@ export const useQuestionStore = create<QuestionState>((set, get) => ({
   },
 
   deleteProgram: async (id) => {
-    const { error } = await supabase.from("programs").delete().eq("id", id);
-    if (error) return false;
+    const isCurrent = captureCacheContext();
+    const { error } = await api.from("programs").delete().eq("id", id);
+    if (!isCurrent()) return false;
+    if (error) { set({ error: error.message }); return false; }
     set((state) => ({
       programs: state.programs.filter((p) => p.id !== id),
     }));

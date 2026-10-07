@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { supabase } from "@/lib/supabase/client";
+import { toast } from "sonner";
+import { api, getOrganizationAccess } from "@/lib/api-client";
+import { sessionClient as auth } from "@/lib/auth-client";
+import { captureCacheContext } from "@/lib/client-cache-context";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -35,6 +38,7 @@ import { Input } from "@/components/ui/input";
 
 type AdminUser = {
   id: string;
+  role: string;
   full_name: string | null;
   email?: string;
 };
@@ -64,25 +68,16 @@ export default function AdminSettingsPage() {
   }, [orgId]);
 
   async function checkUserRole(orgId: string) {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
-
-    const { data } = await supabase
-      .from("organization_members")
-      .select("role")
-      .eq("organization_id", orgId)
-      .eq("user_id", userData.user.id)
-      .single();
-
-    if (data) {
-      setCurrentUserRole(data.role);
-    }
+    const isCurrent = captureCacheContext();
+    setCurrentUserRole(null);
+    const { data } = await getOrganizationAccess(orgId);
+    if (isCurrent()) setCurrentUserRole(data?.role || null);
   }
 
   async function loadAdmins(orgId: string) {
     setIsLoading(true);
 
-    const { data: memberData } = await supabase
+    const { data: memberData } = await api
       .from("organization_members")
       .select("user_id, role")
       .eq("organization_id", orgId)
@@ -98,7 +93,7 @@ export default function AdminSettingsPage() {
       .map((m: any) => m.user_id)
       .filter((id: any): id is string => id !== null);
 
-    const { data: profileData } = await supabase
+    const { data: profileData } = await api
       .from("profiles")
       .select("id, full_name")
       .in("id", adminIds);
@@ -110,6 +105,7 @@ export default function AdminSettingsPage() {
           const role = memberData.find((m: any) => m.user_id === p.id)?.role;
           return {
             id: p.id,
+            role: role || "admin",
             full_name: `${p.full_name} (${role})`,
             email: "No email access",
           };
@@ -125,9 +121,9 @@ export default function AdminSettingsPage() {
 
     setIsInviting(true);
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await auth.getUser();
 
-    const { error } = await supabase.from("org_invites").insert({
+    const { error } = await api.from("org_invites").insert({
       organization_id: orgId,
       email: newAdminEmail.trim(),
       role: "admin",
@@ -144,16 +140,16 @@ export default function AdminSettingsPage() {
   };
 
   const handleRemoveAdmin = async (adminId: string) => {
-    if (!orgId || currentUserRole !== "owner") return;
+    if (!orgId || (currentUserRole !== "owner" && currentUserRole !== "superuser")) return;
 
     // Prevent removing oneself (if Owner removes themselves, they lose org access)
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await auth.getUser();
     if (userData.user?.id === adminId) {
       alert("You cannot remove yourself.");
       return;
     }
 
-    const { error } = await supabase
+    const { error } = await api
       .from("organization_members")
       .delete()
       .eq("organization_id", orgId)
@@ -161,6 +157,8 @@ export default function AdminSettingsPage() {
 
     if (!error) {
       setAdmins(admins.filter((a) => a.id !== adminId));
+    } else {
+      toast.error(error.message);
     }
   };
 
@@ -182,7 +180,7 @@ export default function AdminSettingsPage() {
               <DialogTitle>Add Administrator</DialogTitle>
               <DialogDescription>
                 Invite a new administrator to help manage this organization.
-                They will receive an invite and can join upon signup.
+                This creates an invitation. They can join after verifying their email and opening the dashboard.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -212,8 +210,8 @@ export default function AdminSettingsPage() {
           <CardHeader>
             <CardTitle>Administrators</CardTitle>
             <CardDescription>
-              A list of owners and admins managing this organization. Only
-              Owners can remove other Administrators.
+              A list of owners and admins managing this organization. Owners and
+              global superusers can remove administrators. Owners are protected.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -242,7 +240,7 @@ export default function AdminSettingsPage() {
                       </TableCell>
                       <TableCell>{admin.email}</TableCell>
                       <TableCell className="text-right">
-                        {currentUserRole === "owner" && (
+                        {admin.role !== "owner" && (currentUserRole === "owner" || currentUserRole === "superuser") && (
                           <Button
                             variant="ghost"
                             size="icon"

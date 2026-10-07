@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Plus, Users, Search, ChevronRight } from "lucide-react";
-import { supabase } from "@/lib/supabase/client";
+import { apiRequest, api } from "@/lib/api-client";
+import { sessionClient as auth } from "@/lib/auth-client";
 import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
@@ -67,14 +68,14 @@ export default function ClassroomsPage() {
   async function loadClassrooms() {
     setIsLoading(true);
 
-    const { data: orgData } = await supabase
+    const { data: orgData } = await api
       .from("organizations")
       .select("name")
       .eq("id", orgId)
       .single();
     if (orgData) setOrgName(orgData.name);
 
-    const { data, error } = await supabase
+    const { data, error } = await api
       .from("classrooms")
       .select("*")
       .eq("organization_id", orgId)
@@ -100,26 +101,10 @@ export default function ClassroomsPage() {
     if (!orgId || !newClassName.trim()) return;
 
     setIsCreating(true);
-    const { data: userData } = await supabase.auth.getUser();
-
-    const { data, error } = await supabase
-      .from("classrooms")
-      .insert({
-        organization_id: orgId,
-        name: newClassName,
-        term: newClassTerm || null,
-      })
-      .select()
-      .single();
-
+    const { data, error } = await apiRequest<Classroom>("/api/organizations/" + orgId + "/classrooms", {
+      name: newClassName.trim(), term: newClassTerm.trim() || null,
+    });
     if (!error && data) {
-      if (userData.user?.id) {
-        await supabase.from("classroom_members").insert({
-          classroom_id: data.id,
-          user_id: userData.user.id,
-          role: "teacher",
-        });
-      }
       setClassrooms([data, ...classrooms]);
       setNewClassName("");
       setNewClassTerm("");
@@ -137,7 +122,7 @@ export default function ClassroomsPage() {
       .map((e) => e.trim())
       .filter((e) => e.length > 0);
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await auth.getUser();
 
     const invites = emails.map((email) => ({
       classroom_id: selectedClassroom.id,
@@ -145,7 +130,7 @@ export default function ClassroomsPage() {
       invited_by: userData.user?.id,
     }));
 
-    const { error } = await supabase.from("classroom_invites").insert(invites);
+    const { error } = await api.from("classroom_invites").insert(invites);
 
     if (!error) {
       setInviteEmails("");

@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAuthStore } from "@/stores/auth-store";
-import { supabase } from "@/lib/supabase/client";
+import { api, organizationProgramIds } from "@/lib/api-client";
 import { downloadFullRecordPdf, type RecordPdfData } from "@/lib/record-pdf";
 
 type FullRecordData = {
@@ -44,11 +44,14 @@ export default function FullRecordPreviewPage() {
     if (!user) return;
 
     setIsLoading(true);
-    const { data: codeSubs } = await supabase
+    const ids = await organizationProgramIds(orgId);
+    if (ids.error) { setIsLoading(false); return; }
+    const { data: codeSubs } = await api
       .from("code_submissions")
       .select("id, program_id, code, language, output, metadata, created_at")
       .eq("student_id", user.id)
       .eq("status", "approved")
+      .in("program_id", ids.data || [])
       .order("created_at", { ascending: false });
 
     if (!codeSubs) {
@@ -60,12 +63,12 @@ export default function FullRecordPreviewPage() {
     const enrichedRecords: FullRecordData[] = await Promise.all(
       codeSubs.map(async (cs) => {
         const [{ data: prog }, { data: algo }] = await Promise.all([
-          supabase
+          api
             .from("programs")
             .select("title, description, classroom_id")
             .eq("id", cs.program_id)
             .single(),
-          supabase
+          api
             .from("algorithm_submissions")
             .select("content")
             .eq("program_id", cs.program_id)
@@ -77,7 +80,7 @@ export default function FullRecordPreviewPage() {
         ]);
 
         const { data: classroom } = prog?.classroom_id
-          ? await supabase
+          ? await api
               .from("classrooms")
               .select("name")
               .eq("id", prog.classroom_id)
@@ -103,7 +106,7 @@ export default function FullRecordPreviewPage() {
 
     setRecords(enrichedRecords);
     setIsLoading(false);
-  }, [user]);
+  }, [user, orgId]);
 
   useEffect(() => {
     if (user) {

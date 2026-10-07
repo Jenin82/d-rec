@@ -16,7 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useQuestionStore, type Program } from "@/stores/question-store";
 import { useAuthStore } from "@/stores/auth-store";
-import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api-client";
 import { downloadSingleRecordPdf } from "@/lib/record-pdf";
 
 type RecordData = {
@@ -50,7 +50,7 @@ export default function RecordViewPage() {
     }
 
     // Load approved algorithm
-    const { data: algo } = await supabase
+    const { data: algo } = await api
       .from("algorithm_submissions")
       .select("content")
       .eq("program_id", programId)
@@ -61,7 +61,7 @@ export default function RecordViewPage() {
       .maybeSingle();
 
     // Load approved code
-    const { data: codeSub } = await supabase
+    const { data: codeSub } = await api
       .from("code_submissions")
       .select("code, language, output, metadata, created_at")
       .eq("program_id", programId)
@@ -72,12 +72,15 @@ export default function RecordViewPage() {
       .maybeSingle();
 
     const { data: classroom } = program.classroom_id
-      ? await supabase
+      ? await api
           .from("classrooms")
           .select("name")
           .eq("id", program.classroom_id)
+          .eq("organization_id", orgId)
           .maybeSingle()
       : { data: null };
+
+    if (!algo || !codeSub || !classroom) { setRecord(null); setIsLoading(false); return; }
 
     setRecord({
       program,

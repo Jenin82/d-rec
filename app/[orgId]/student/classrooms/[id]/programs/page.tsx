@@ -15,7 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
-import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth-store";
 
 type Program = {
@@ -48,7 +48,7 @@ export default function StudentClassroomProgramsPage() {
       setIsLoading(true);
 
       // Load classroom name
-      const { data: classroomData } = await supabase
+      const { data: classroomData } = await api
         .from("classrooms")
         .select("name")
         .eq("id", classroomId)
@@ -57,7 +57,7 @@ export default function StudentClassroomProgramsPage() {
       if (classroomData) setClassroomName(classroomData.name);
 
       // Load programs for this classroom
-      const { data: programData, error } = await supabase
+      const { data: programData, error } = await api
         .from("programs")
         .select("id, title, description, status")
         .eq("classroom_id", classroomId)
@@ -80,13 +80,13 @@ export default function StudentClassroomProgramsPage() {
 
         const [{ data: algorithmSubs }, { data: codeSubs }] = await Promise.all(
           [
-            supabase
+            api
               .from("algorithm_submissions")
               .select("program_id, status, feedback, created_at")
               .eq("student_id", user.id)
               .in("program_id", programIds)
               .order("created_at", { ascending: false }),
-            supabase
+            api
               .from("code_submissions")
               .select("program_id, status, metadata, created_at")
               .eq("student_id", user.id)

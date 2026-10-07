@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import Editor from "@monaco-editor/react";
@@ -33,7 +33,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { StatusBadge } from "@/components/status-badge";
-import { supabase } from "@/lib/supabase/client";
+import { readIntegrationResponse, api } from "@/lib/api-client";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -46,6 +46,7 @@ type AlgorithmSubmission = {
   status: string;
   feedback: string | null;
   created_at: string;
+  version: number;
 };
 
 const LANGUAGE_IDS: Record<string, number> = {
@@ -68,6 +69,7 @@ type CodeSubmission = {
   status: string;
   metadata: unknown;
   created_at: string;
+  version: number;
 };
 
 export default function TeacherReviewDetailsPage() {
@@ -94,6 +96,8 @@ export default function TeacherReviewDetailsPage() {
   const [codeFeedback, setCodeFeedback] = useState("");
 
   const [isLoading, setIsLoading] = useState(true);
+  const [scopeError, setScopeError] = useState<string | null>(null);
+  const loadSequence = useRef(0);
   const [actionLoading, setActionLoading] = useState<
     | "algorithm-approve"
     | "algorithm-reject"
@@ -120,26 +124,41 @@ export default function TeacherReviewDetailsPage() {
     { label: "Review Queue", href: `/${orgId}/teacher/reviews` },
   ];
 
+  async function verifyProgramOrganization() {
+    const program = await api.from("programs").select("classroom_id").eq("id", programId).single();
+    if (program.error || !program.data?.classroom_id) return false;
+    const classroom = await api.from("classrooms").select("id").eq("id", program.data.classroom_id).eq("organization_id", orgId).single();
+    return !classroom.error && Boolean(classroom.data);
+  }
+
   async function loadDetails() {
     if (!orgId || !programId || !studentId) return;
 
     setIsLoading(true);
+    setScopeError(null);
+    setAlgorithmSubmission(null);
+    setCodeSubmission(null);
+    const sequence = ++loadSequence.current;
+    const valid = await verifyProgramOrganization();
+    if (sequence !== loadSequence.current) return;
+    if (!valid) { setScopeError("This assignment is not available in this organization."); setIsLoading(false); return; }
 
     const [{ data: orgData }, { data: programData }, { data: profileData }] =
       await Promise.all([
-        supabase.from("organizations").select("name").eq("id", orgId).single(),
-        supabase
+        api.from("organizations").select("name").eq("id", orgId).single(),
+        api
           .from("programs")
           .select("title, description")
           .eq("id", programId)
           .single(),
-        supabase
+        api
           .from("profiles")
           .select("full_name")
           .eq("id", studentId)
           .single(),
       ]);
 
+    if (sequence !== loadSequence.current) return;
     if (orgData?.name) setOrgName(orgData.name);
     if (programData?.title) setProgramTitle(programData.title);
     setProgramDescription(programData?.description || null);
@@ -147,17 +166,17 @@ export default function TeacherReviewDetailsPage() {
     if (profileData?.full_name) setStudentName(profileData.full_name);
 
     const [{ data: algorithmData }, { data: codeData }] = await Promise.all([
-      supabase
+      api
         .from("algorithm_submissions")
-        .select("id, content, status, feedback, created_at")
+        .select("id, content, status, feedback, created_at, version")
         .eq("program_id", programId)
         .eq("student_id", studentId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
-      supabase
+      api
         .from("code_submissions")
-        .select("id, code, language, output, status, metadata, created_at")
+        .select("id, code, language, output, status, metadata, created_at, version")
         .eq("program_id", programId)
         .eq("student_id", studentId)
         .order("created_at", { ascending: false })
@@ -165,6 +184,7 @@ export default function TeacherReviewDetailsPage() {
         .maybeSingle(),
     ]);
 
+    if (sequence !== loadSequence.current) return;
     setAlgorithmSubmission(algorithmData || null);
     setCodeSubmission(codeData || null);
     setAlgorithmFeedback(algorithmData?.feedback || "");
@@ -184,7 +204,7 @@ export default function TeacherReviewDetailsPage() {
       loadDetails();
     }, 0);
 
-    return () => window.clearTimeout(timeoutId);
+    return () => { window.clearTimeout(timeoutId); loadSequence.current += 1; };
   }, [orgId, programId, studentId]);
 
   const handleGetAIFeedback = async (mode: "algorithm" | "code") => {
@@ -217,6 +237,7 @@ export default function TeacherReviewDetailsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          programId,
           mode,
           algorithm: algorithmSubmission?.content || "",
           code: codeSubmission?.code || "",
@@ -226,7 +247,7 @@ export default function TeacherReviewDetailsPage() {
         }),
       });
 
-      const data = await response.json().catch(() => null);
+      const data = await readIntegrationResponse(response);
       if (!response.ok) {
         setAiFeedback(data?.error || "Failed to get AI feedback.");
         return;
@@ -253,12 +274,13 @@ export default function TeacherReviewDetailsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          programId,
           source_code: codeSubmission.code,
           language_id: LANGUAGE_IDS[normalizeLanguage(codeSubmission.language)] || 63,
           stdin: testInput,
         }),
       });
-      const data = await response.json();
+      const data = await readIntegrationResponse(response);
       if (!response.ok) {
         setTestOutput(
           `Error: ${data.error || "Execution failed"}\n${data.details || ""}`,
@@ -282,6 +304,7 @@ export default function TeacherReviewDetailsPage() {
   };
 
   const handleAlgorithmReview = async (status: "approved" | "rejected") => {
+    if (scopeError || !await verifyProgramOrganization()) { toast.error("Assignment organization does not match this review."); return; }
     if (!algorithmSubmission?.id) {
       toast.error("No algorithm submission found.");
       return;
@@ -291,18 +314,19 @@ export default function TeacherReviewDetailsPage() {
       status === "approved" ? "algorithm-approve" : "algorithm-reject",
     );
 
-    const { error } = await supabase
+    const { error } = await api
       .from("algorithm_submissions")
       .update({
         status,
         feedback: algorithmFeedback || null,
+        expectedVersion: algorithmSubmission.version,
       })
       .eq("id", algorithmSubmission.id);
 
     setActionLoading(null);
 
     if (error) {
-      toast.error("Failed to update algorithm review.");
+      toast.error(error.message);
       return;
     }
 
@@ -311,6 +335,7 @@ export default function TeacherReviewDetailsPage() {
   };
 
   const handleCodeReview = async (status: "approved" | "rejected") => {
+    if (scopeError || !await verifyProgramOrganization()) { toast.error("Assignment organization does not match this review."); return; }
     if (!codeSubmission?.id) {
       toast.error("No code submission found.");
       return;
@@ -318,21 +343,19 @@ export default function TeacherReviewDetailsPage() {
 
     setActionLoading(status === "approved" ? "code-approve" : "code-reject");
 
-    const { error } = await supabase
+    const { error } = await api
       .from("code_submissions")
       .update({
         status,
-        metadata: {
-          ...((codeSubmission.metadata as Record<string, unknown>) || {}),
-          feedback: codeFeedback || null,
-        },
+        feedback: codeFeedback || null,
+        expectedVersion: codeSubmission.version,
       })
       .eq("id", codeSubmission.id);
 
     setActionLoading(null);
 
     if (error) {
-      toast.error("Failed to update code review.");
+      toast.error(error.message);
       return;
     }
 
@@ -351,7 +374,7 @@ export default function TeacherReviewDetailsPage() {
         </Button>
       }
     >
-      {isLoading ? (
+      {scopeError ? <p role="alert" className="text-destructive">{scopeError}</p> : isLoading ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             Loading review details...
@@ -405,7 +428,7 @@ export default function TeacherReviewDetailsPage() {
                   <Button
                     size="sm"
                     className="gap-2"
-                    disabled={actionLoading !== null}
+                    disabled={actionLoading !== null || algorithmSubmission?.status !== "pending"}
                     onClick={() => handleAlgorithmReview("approved")}
                   >
                     {actionLoading === "algorithm-approve" ? (
@@ -419,7 +442,7 @@ export default function TeacherReviewDetailsPage() {
                     size="sm"
                     variant="outline"
                     className="gap-2 text-destructive hover:bg-destructive/10"
-                    disabled={actionLoading !== null}
+                    disabled={actionLoading !== null || algorithmSubmission?.status !== "pending"}
                     onClick={() => handleAlgorithmReview("rejected")}
                   >
                     {actionLoading === "algorithm-reject" ? (
@@ -553,7 +576,7 @@ export default function TeacherReviewDetailsPage() {
                   <Button
                     size="sm"
                     className="gap-2"
-                    disabled={actionLoading !== null}
+                    disabled={actionLoading !== null || codeSubmission?.status !== "pending"}
                     onClick={() => handleCodeReview("approved")}
                   >
                     {actionLoading === "code-approve" ? (
@@ -567,7 +590,7 @@ export default function TeacherReviewDetailsPage() {
                     size="sm"
                     variant="outline"
                     className="gap-2 text-destructive hover:bg-destructive/10"
-                    disabled={actionLoading !== null}
+                    disabled={actionLoading !== null || codeSubmission?.status !== "pending"}
                     onClick={() => handleCodeReview("rejected")}
                   >
                     {actionLoading === "code-reject" ? (
@@ -696,7 +719,7 @@ export default function TeacherReviewDetailsPage() {
             {pendingAiMode !== null ? (
               <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Analyzing with Gemini...
+                Getting guidance...
               </div>
             ) : aiFeedback ? (
               <div className="whitespace-pre-wrap text-sm">{aiFeedback}</div>

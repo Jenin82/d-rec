@@ -25,8 +25,8 @@ export default function StudentQuestionsPage() {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    fetchPrograms();
-  }, [fetchPrograms]);
+    fetchPrograms(undefined, orgId);
+  }, [fetchPrograms, orgId]);
 
   const filtered = programs.filter(
     (p) =>

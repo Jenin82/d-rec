@@ -41,8 +41,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { supabase } from "@/lib/supabase/client";
+import { apiRequest, api } from "@/lib/api-client";
+import { sessionClient as auth } from "@/lib/auth-client";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuthStore } from "@/stores/auth-store";
 
 type Classroom = {
   id: string;
@@ -62,6 +64,7 @@ type Teacher = {
 export default function AdminClassroomsPage() {
   const params = useParams();
   const orgId = params.orgId as string;
+  const currentUserId = useAuthStore((state) => state.user?.id);
 
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -71,6 +74,9 @@ export default function AdminClassroomsPage() {
   const [newName, setNewName] = useState("");
   const [newTerm, setNewTerm] = useState("");
   const [selectedTeacher, setSelectedTeacher] = useState<string>("none");
+
+  const canAssignToMe = teachers.some((teacher) => teacher.user_id === currentUserId);
+  const needsTeacher = selectedTeacher === "none" && !canAssignToMe;
 
   // Invite students state
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -95,14 +101,14 @@ export default function AdminClassroomsPage() {
   }, [orgId]);
 
   async function loadTeachers() {
-    const { data, error } = await supabase
+    const { data, error } = await api
       .from("organization_members")
       .select("user_id, profiles(full_name)")
       .eq("organization_id", orgId)
       .in("role", ["teacher", "admin", "owner"]);
 
     if (!error && data) {
-      // Supabase's generated generic types might nest profiles differently.
+      // Nested relation DTOs may contain a missing profile.
       // Assuming array or single object.
       const formattedTeachers = data.map((d: any) => ({
         user_id: d.user_id,
@@ -114,7 +120,7 @@ export default function AdminClassroomsPage() {
 
   async function loadClassrooms() {
     setIsLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await api
       .from("classrooms")
       .select("id, name, term, created_at")
       .eq("organization_id", orgId)
@@ -125,28 +131,13 @@ export default function AdminClassroomsPage() {
   }
 
   async function handleCreate() {
-    if (!newName.trim()) return;
+    if (!newName.trim() || needsTeacher) return;
     setIsCreating(true);
-    const { data: classData, error } = await supabase
-      .from("classrooms")
-      .insert({
-        organization_id: orgId,
-        name: newName.trim(),
-        term: newTerm.trim() || null,
-      })
-      .select()
-      .single();
-
+    const { data: classData, error } = await apiRequest("/api/organizations/" + orgId + "/classrooms", {
+      name: newName.trim(), term: newTerm.trim() || null,
+      teacherId: selectedTeacher && selectedTeacher !== "none" ? selectedTeacher : undefined,
+    });
     if (!error && classData) {
-      // Assign teacher if selected
-      if (selectedTeacher && selectedTeacher !== "none") {
-        await supabase.from("classroom_members").insert({
-          classroom_id: classData.id,
-          user_id: selectedTeacher,
-          role: "teacher",
-        });
-      }
-
       toast.success("Classroom created.");
       setNewName("");
       setNewTerm("");
@@ -154,7 +145,7 @@ export default function AdminClassroomsPage() {
       setIsDialogOpen(false);
       loadClassrooms();
     } else {
-      toast.error("Failed to create classroom.");
+      toast.error(error?.message || "Failed to create classroom.");
     }
     setIsCreating(false);
   }
@@ -168,7 +159,7 @@ export default function AdminClassroomsPage() {
       .map((e) => e.trim())
       .filter((e) => e.length > 0);
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await auth.getUser();
 
     const invites = emails.map((email) => ({
       classroom_id: selectedClassroom.id,
@@ -176,7 +167,7 @@ export default function AdminClassroomsPage() {
       invited_by: userData.user?.id,
     }));
 
-    const { error } = await supabase.from("classroom_invites").insert(invites);
+    const { error } = await api.from("classroom_invites").insert(invites);
 
     if (!error) {
       toast.success("Students added to classroom.");
@@ -232,11 +223,11 @@ export default function AdminClassroomsPage() {
                   onValueChange={setSelectedTeacher}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a teacher (optional)" />
+                    <SelectValue placeholder="Select a teacher" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">
-                      No Teacher (Unassigned)
+                    <SelectItem value="none" disabled={!canAssignToMe}>
+                      {canAssignToMe ? "Assign to me" : "Choose an organization teacher"}
                     </SelectItem>
                     {teachers.map((t) => (
                       <SelectItem key={t.user_id} value={t.user_id}>
@@ -247,12 +238,17 @@ export default function AdminClassroomsPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {needsTeacher && (
+                  <p className="text-sm text-muted-foreground">
+                    Select an existing organization teacher, admin or owner. Global access alone does not make you a classroom teacher.
+                  </p>
+                )}
               </div>
             </div>
             <DialogFooter>
               <Button
                 onClick={handleCreate}
-                disabled={isCreating || !newName.trim()}
+                disabled={isCreating || !newName.trim() || needsTeacher}
               >
                 {isCreating ? "Creating..." : "Create"}
               </Button>

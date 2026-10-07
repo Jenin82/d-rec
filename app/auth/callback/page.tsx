@@ -4,42 +4,15 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { Loader2 } from "lucide-react";
-import { supabase } from "@/lib/supabase/client";
+import { sessionClient } from "@/lib/auth-client";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
 
   useEffect(() => {
     const finalize = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        // If a new Google user logs in, they might not have a profile yet or might not have a role set.
-        // We ensure a basic profile exists and determine their role.
-        let { data: profile } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", data.session.user.id)
-          .single();
-
-        // If no profile exists (e.g., first time OAuth login and no trigger is set up), create one.
-        if (!profile) {
-          const { data: newProfile } = await supabase
-            .from("profiles")
-            .insert({
-              id: data.session.user.id,
-              role: "student", // default role
-              full_name: data.session.user.user_metadata?.full_name || "",
-            })
-            .select("role")
-            .single();
-
-          profile = newProfile;
-        }
-
-        router.replace("/dashboard");
-      } else {
-        router.replace("/login");
-      }
+      const { data } = await sessionClient.getUser();
+      router.replace(data.user ? "/dashboard" : "/login");
     };
 
     finalize();

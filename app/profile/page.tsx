@@ -13,7 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/lib/supabase/client";
+import { readIntegrationResponse, api } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth-store";
 
 type ProfileForm = {
@@ -34,6 +34,8 @@ const defaultProfile: ProfileForm = {
 
 export default function ProfilePage() {
   const user = useAuthStore((state) => state.user);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [formState, setFormState] = useState<ProfileForm>(defaultProfile);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">(
     "idle",
@@ -41,17 +43,19 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!user) {
+      setFormState(defaultProfile);
       return;
     }
 
     const fetchProfile = async () => {
-      const { data, error } = await supabase
+      const { data, error } = await api
         .from("profiles")
         .select("full_name, display_name, phone, avatar_url, bio")
         .eq("id", user.id)
         .single();
 
       if (error) {
+        setErrorMessage(error.message);
         return;
       }
 
@@ -85,23 +89,39 @@ export default function ProfilePage() {
 
     setStatus("saving");
 
-    const { error } = await supabase
+    const { error } = await api
       .from("profiles")
       .update({
         full_name: formState.full_name,
         display_name: formState.display_name,
         phone: formState.phone,
-        avatar_url: formState.avatar_url,
         bio: formState.bio,
       })
       .eq("id", user.id);
 
     if (error) {
+      setErrorMessage(error.message);
       setStatus("error");
       return;
     }
 
     setStatus("saved");
+  };
+
+  const changeAvatar = async (file?: File) => {
+    if (!user) return;
+    if (file && file.size > 2 * 1024 * 1024) { setErrorMessage("Choose an image smaller than 2 MB."); return; }
+    setAvatarBusy(true);
+    setErrorMessage(null);
+    try {
+      const body = new FormData();
+      if (file) body.set("file", file);
+      const response = await fetch("/api/profile/avatar", { method: file ? "POST" : "DELETE", body: file ? body : undefined });
+      const result = await readIntegrationResponse(response);
+      if (!response.ok) throw new Error(result.error || "Unable to update avatar.");
+      setFormState((current) => ({ ...current, avatar_url: result.avatar_url || "" }));
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "Unable to update avatar."); }
+    finally { setAvatarBusy(false); }
   };
 
   return (
@@ -144,12 +164,11 @@ export default function ProfilePage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="avatar">Avatar URL</Label>
-                  <Input
-                    id="avatar"
-                    value={formState.avatar_url}
-                    onChange={updateField("avatar_url")}
-                  />
+                  <Label htmlFor="avatar">Profile avatar</Label>
+                  {formState.avatar_url && <img src={formState.avatar_url} alt="Your profile avatar" className="h-16 w-16 rounded-full object-cover" />}
+                  <Input id="avatar" type="file" accept="image/png,image/jpeg,image/webp" disabled={avatarBusy} onChange={(event) => { const file = event.target.files?.[0]; if (file) void changeAvatar(file); event.target.value = ""; }} />
+                  <p className="text-xs text-muted-foreground">PNG, JPEG or WebP, up to 2 MB.</p>
+                  {formState.avatar_url && <Button type="button" variant="outline" disabled={avatarBusy} onClick={() => changeAvatar()}>Remove avatar</Button>}
                 </div>
               </div>
               <div className="space-y-2">
@@ -161,9 +180,10 @@ export default function ProfilePage() {
                   onChange={updateField("bio")}
                 />
               </div>
+              {errorMessage && status !== "error" && <p role="alert" className="text-xs text-destructive">{errorMessage}</p>}
               {status === "error" ? (
                 <p className="text-xs text-destructive">
-                  Unable to save profile changes.
+                  {errorMessage || "Unable to save profile changes."}
                 </p>
               ) : null}
               {status === "saved" ? (
