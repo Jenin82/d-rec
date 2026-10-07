@@ -39,7 +39,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useAuthStore } from "@/stores/auth-store";
-import { supabase } from "@/lib/supabase/client";
+import { readIntegrationResponse, apiRequest, api } from "@/lib/api-client";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -90,15 +90,25 @@ export default function StudentProgramPage() {
   const [algorithmStatus, setAlgorithmStatus] = useState<string | null>(null);
   const [codeStatus, setCodeStatus] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [algorithmVersion, setAlgorithmVersion] = useState(0);
+  const [codeVersion, setCodeVersion] = useState(0);
+  const [algorithmId, setAlgorithmId] = useState<string | null>(null);
+  const [codeId, setCodeId] = useState<string | null>(null);
+  const algorithmFrozen = algorithmStatus === "approved" || algorithmStatus === "pending";
+  const codeFrozen = codeStatus === "approved" || codeStatus === "pending";
+
 
   useEffect(() => {
     async function loadProgram() {
-      if (!programId) return;
+      if (!programId || !user) return;
+      const classroom = await api.from("classrooms").select("id").eq("id", classroomId).eq("organization_id", orgId).single();
+      if (classroom.error) { toast.error(classroom.error.message); return; }
 
-      const { data: programData, error } = await supabase
+      const { data: programData, error } = await api
         .from("programs")
         .select("title, description, status")
         .eq("id", programId)
+        .eq("classroom_id", classroomId)
         .single();
 
       if (!error && programData) {
@@ -109,17 +119,17 @@ export default function StudentProgramPage() {
 
       const [{ data: algorithmSubmission }, { data: codeSubmission }] =
         await Promise.all([
-          supabase
+          api
             .from("algorithm_submissions")
-            .select("content, status")
+            .select("id, content, status, version")
             .eq("program_id", programId)
             .eq("student_id", user.id)
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle(),
-          supabase
+          api
             .from("code_submissions")
-            .select("id, code, language, output, status, metadata")
+            .select("id, code, language, output, status, metadata, version")
             .eq("program_id", programId)
             .eq("student_id", user.id)
             .order("created_at", { ascending: false })
@@ -128,11 +138,15 @@ export default function StudentProgramPage() {
         ]);
 
       if (algorithmSubmission) {
+        setAlgorithmId(algorithmSubmission.id);
+        setAlgorithmVersion(algorithmSubmission.version);
         setAlgorithm(algorithmSubmission.content || "");
         setAlgorithmStatus(algorithmSubmission.status || null);
       }
 
       if (codeSubmission) {
+        setCodeId(codeSubmission.id);
+        setCodeVersion(codeSubmission.version);
         setCode(codeSubmission.code || "");
         setCodeStatus(codeSubmission.status || null);
         setOutput(codeSubmission.output || "Awaiting execution run.");
@@ -147,12 +161,12 @@ export default function StudentProgramPage() {
       }
     }
     loadProgram();
-  }, [programId, user?.id]);
+  }, [programId, classroomId, orgId, user?.id]);
 
   const getStatusColor = (status: string | null) => {
     if (!status) return "bg-zinc-100 text-zinc-700";
     if (status === "approved") return "bg-emerald-100 text-emerald-700";
-    if (status === "pending" || status === "pending_review") {
+    if (status === "pending") {
       return "bg-amber-100 text-amber-700";
     }
     if (status === "rejected") return "bg-red-100 text-red-700";
@@ -172,12 +186,13 @@ export default function StudentProgramPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          programId,
           source_code: code,
           language_id: language.id,
           stdin: customInput,
         }),
       });
-      const data = await response.json();
+      const data = await readIntegrationResponse(response);
       if (!response.ok) {
         setOutput(
           `Error: ${data.error || "Execution failed"}\n${data.details || ""}`,
@@ -229,6 +244,7 @@ export default function StudentProgramPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          programId,
           mode,
           algorithm,
           code,
@@ -237,7 +253,7 @@ export default function StudentProgramPage() {
           question: questionText,
         }),
       });
-      const data = await response.json();
+      const data = await readIntegrationResponse(response);
 
       if (!response.ok) {
         setAiFeedback(data.error || "Failed to get AI feedback.");
@@ -255,238 +271,46 @@ export default function StudentProgramPage() {
   };
 
   const saveAlgorithm = async (newStatus: "draft" | "pending") => {
-    if (!user) {
-      toast.error("You must be logged in to save your algorithm.");
-      return;
-    }
-
-    if (!algorithm.trim()) {
-      toast.error("Please write your algorithm first.");
-      return;
-    }
-
+    if (!user || !algorithm.trim() || algorithmFrozen) return;
     setIsSubmitting(true);
-    try {
-      const { data: existing } = await supabase
-        .from("algorithm_submissions")
-        .select("id")
-        .eq("program_id", programId)
-        .eq("student_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existing?.id) {
-        const { error } = await supabase
-          .from("algorithm_submissions")
-          .update({
-            content: algorithm,
-            status: newStatus,
-          })
-          .eq("id", existing.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("algorithm_submissions").insert({
-          program_id: programId,
-          student_id: user.id,
-          content: algorithm,
-          status: newStatus,
-        });
-
-        if (error) throw error;
-      }
-
-      setAlgorithmStatus(newStatus);
-      toast.success(
-        newStatus === "draft"
-          ? "Algorithm draft saved."
-          : "Algorithm submitted for teacher approval.",
-      );
-    } catch (error) {
-      console.error("Error saving algorithm:", error);
-      toast.error("Failed to save algorithm. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
+    const values = { program_id: programId, content: algorithm, status: newStatus, expectedVersion: algorithmVersion };
+    const query = algorithmId ? api.from("algorithm_submissions").update(values).eq("id", algorithmId) : api.from("algorithm_submissions").insert(values);
+    const { data, error } = await query.select().single();
+    if (error || !data) toast.error(error?.message || "Unable to save algorithm.");
+    else { setAlgorithmId(data.id); setAlgorithmVersion(data.version); setAlgorithmStatus(data.status); toast.success(newStatus === "draft" ? "Algorithm draft saved." : "Algorithm submitted for teacher review."); }
+    setIsSubmitting(false);
   };
 
+  const persistCode = async (newStatus: "draft" | "pending") => {
+    const values = { program_id: programId, code, language: language.value, output, metadata: { custom_input: customInput }, status: newStatus, expectedVersion: codeVersion };
+    const query = codeId ? api.from("code_submissions").update(values).eq("id", codeId) : api.from("code_submissions").insert(values);
+    const result = await query.select().single();
+    if (result.data) { setCodeId(result.data.id); setCodeVersion(result.data.version); setCodeStatus(result.data.status); }
+    return result;
+  };
   const saveCode = async () => {
-    if (!user) {
-      toast.error("You must be logged in to save code.");
-      return;
-    }
-
-    if (!code.trim()) {
-      toast.error("Please write your code first.");
-      return;
-    }
-
+    if (!user || !code.trim() || codeFrozen) return;
     setIsSubmitting(true);
-    try {
-      const { data: existing } = await supabase
-        .from("code_submissions")
-        .select("id")
-        .eq("program_id", programId)
-        .eq("student_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existing?.id) {
-        const { data: existingCodeData } = await supabase
-          .from("code_submissions")
-          .select("metadata")
-          .eq("id", existing.id)
-          .maybeSingle();
-
-        const { error } = await supabase
-          .from("code_submissions")
-          .update({
-            code,
-            language: language.value,
-            output,
-            metadata: {
-              ...((existingCodeData?.metadata as Record<string, unknown>) ||
-                {}),
-              custom_input: customInput,
-            },
-            status: "draft",
-          })
-          .eq("id", existing.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("code_submissions").insert({
-          program_id: programId,
-          student_id: user.id,
-          code,
-          language: language.value,
-          output,
-          metadata: {
-            custom_input: customInput,
-          },
-          status: "draft",
-        });
-
-        if (error) throw error;
-      }
-
-      setCodeStatus("draft");
-      toast.success("Code draft saved.");
-    } catch (error) {
-      console.error("Error saving code:", error);
-      toast.error("Failed to save code. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
+    const { error } = await persistCode("draft");
+    if (error) toast.error(error.message); else toast.success("Code draft saved.");
+    setIsSubmitting(false);
   };
 
   const handleSubmitRecord = async () => {
-    if (!user) {
-      toast.error("You must be logged in to submit.");
-      return;
-    }
-
+    if (!user || !code.trim() || codeFrozen || algorithmStatus !== "approved") return;
     setIsSubmitting(true);
-    try {
-      const { data: existingAlgo } = await supabase
-        .from("algorithm_submissions")
-        .select("id")
-        .eq("program_id", programId)
-        .eq("student_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+    const { error } = await persistCode("pending");
+    if (error) toast.error(error.message);
+    else { toast.success("Code submitted for teacher review."); router.push(`/${orgId}/student/classrooms/${classroomId}/programs`); }
+    setIsSubmitting(false);
+  };
 
-      if (existingAlgo?.id) {
-        const { error: algoError } = await supabase
-          .from("algorithm_submissions")
-          .update({
-            content: algorithm,
-            status: "pending",
-          })
-          .eq("id", existingAlgo.id);
-
-        if (algoError) throw algoError;
-      } else {
-        const { error: algoError } = await supabase
-          .from("algorithm_submissions")
-          .insert({
-            program_id: programId,
-            student_id: user.id,
-            content: algorithm,
-            status: "pending",
-          });
-
-        if (algoError) throw algoError;
-      }
-
-      const { data: existingCode } = await supabase
-        .from("code_submissions")
-        .select("id")
-        .eq("program_id", programId)
-        .eq("student_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existingCode?.id) {
-        const { data: existingCodeData } = await supabase
-          .from("code_submissions")
-          .select("metadata")
-          .eq("id", existingCode.id)
-          .maybeSingle();
-
-        const { error: codeError } = await supabase
-          .from("code_submissions")
-          .update({
-            code,
-            language: language.value,
-            output: output.startsWith("Awaiting")
-              ? "No execution output"
-              : output,
-            metadata: {
-              ...((existingCodeData?.metadata as Record<string, unknown>) ||
-                {}),
-              custom_input: customInput,
-            },
-            status: "pending",
-          })
-          .eq("id", existingCode.id);
-
-        if (codeError) throw codeError;
-      } else {
-        const { error: codeError } = await supabase
-          .from("code_submissions")
-          .insert({
-            program_id: programId,
-            student_id: user.id,
-            code,
-            language: language.value,
-            output: output.startsWith("Awaiting")
-              ? "No execution output"
-              : output,
-            metadata: {
-              custom_input: customInput,
-            },
-            status: "pending",
-          });
-
-        if (codeError) throw codeError;
-      }
-
-      setAlgorithmStatus("pending");
-      setCodeStatus("pending");
-
-      toast.success("Record submitted successfully!");
-      router.push(`/${orgId}/student/classrooms/${classroomId}/programs`);
-    } catch (error) {
-      console.error("Error submitting record:", error);
-      toast.error("Failed to submit record. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
+  const reopenWork = async () => {
+    setIsSubmitting(true);
+    const { error } = await apiRequest(`/api/programs/${programId}/reopen`, { algorithmVersion, codeVersion });
+    if (error) toast.error(error.message);
+    else { toast.success("Work reopened. Both parts require review again."); window.location.reload(); }
+    setIsSubmitting(false);
   };
 
   return (
@@ -532,6 +356,7 @@ export default function StudentProgramPage() {
               className="min-h-[220px] flex-1"
               placeholder="Write your algorithm steps here..."
               value={algorithm}
+              disabled={algorithmFrozen}
               onChange={(e) => setAlgorithm(e.target.value)}
             />
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -539,7 +364,7 @@ export default function StudentProgramPage() {
                 <Button
                   size="sm"
                   onClick={() => saveAlgorithm("draft")}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || algorithmFrozen}
                 >
                   Save Draft
                 </Button>
@@ -547,7 +372,7 @@ export default function StudentProgramPage() {
                   size="sm"
                   variant="outline"
                   onClick={() => saveAlgorithm("pending")}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || algorithmFrozen}
                 >
                   Request Approval
                 </Button>
@@ -608,6 +433,7 @@ export default function StudentProgramPage() {
             <div className="flex items-center gap-2">
               <Select
                 value={language.value}
+                disabled={codeFrozen}
                 onValueChange={(val) => {
                   const lang = LANGUAGES.find((l) => l.value === val);
                   if (lang) setLanguage(lang);
@@ -647,6 +473,7 @@ export default function StudentProgramPage() {
                 onChange={(val) => setCode(val || "")}
                 theme="vs-dark"
                 options={{
+                  readOnly: codeFrozen,
                   minimap: { enabled: false },
                   scrollBeyondLastLine: false,
                   fontSize: 14,
@@ -679,7 +506,7 @@ export default function StudentProgramPage() {
                   size="sm"
                   variant="outline"
                   onClick={saveCode}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || codeFrozen}
                 >
                   Save Code
                 </Button>
@@ -724,6 +551,7 @@ export default function StudentProgramPage() {
                 placeholder="Provide input values for Judge0 execution..."
                 className="min-h-[90px]"
                 value={customInput}
+                disabled={codeFrozen}
                 onChange={(e) => setCustomInput(e.target.value)}
               />
             </div>
@@ -752,9 +580,10 @@ export default function StudentProgramPage() {
         </CardHeader>
         <CardContent className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm text-muted-foreground">
-            Submission status: Draft ready, waiting for final compile.
+            Algorithm: {getStatusLabel(algorithmStatus)}. Code: {getStatusLabel(codeStatus)}.
           </div>
-          <Button onClick={handleSubmitRecord} disabled={isSubmitting}>
+          {(algorithmFrozen || codeFrozen) && <Button variant="outline" disabled={isSubmitting} onClick={reopenWork}>Reopen work for changes</Button>}
+          <Button onClick={handleSubmitRecord} disabled={isSubmitting || codeFrozen || algorithmStatus !== "approved" || !code.trim()}>
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -763,7 +592,7 @@ export default function StudentProgramPage() {
             ) : (
               <>
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                Submit Record
+                Submit Code for Review
               </>
             )}
           </Button>
@@ -779,6 +608,7 @@ export default function StudentProgramPage() {
                 <div className="flex items-center gap-2">
                   <Select
                     value={language.value}
+                disabled={codeFrozen}
                     onValueChange={(val) => {
                       const lang = LANGUAGES.find((l) => l.value === val);
                       if (lang) setLanguage(lang);
@@ -851,7 +681,8 @@ export default function StudentProgramPage() {
                       onChange={(val) => setCode(val || "")}
                       theme="vs-dark"
                       options={{
-                        minimap: { enabled: false },
+                        readOnly: codeFrozen,
+                  minimap: { enabled: false },
                         scrollBeyondLastLine: false,
                         fontSize: 14,
                         padding: { top: 16, bottom: 16 },
@@ -871,6 +702,7 @@ export default function StudentProgramPage() {
                           placeholder="Input values..."
                           className="min-h-[100px] resize-y"
                           value={customInput}
+                disabled={codeFrozen}
                           onChange={(e) => setCustomInput(e.target.value)}
                         />
                       </div>
@@ -911,7 +743,7 @@ export default function StudentProgramPage() {
             {isGettingFeedback ? (
               <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Analyzing with Gemini...
+                Getting guidance...
               </div>
             ) : aiFeedback ? (
               <div className="whitespace-pre-wrap text-sm">{aiFeedback}</div>

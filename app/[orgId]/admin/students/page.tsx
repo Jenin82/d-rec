@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api-client";
 
 type Student = {
   id: string;
@@ -49,7 +49,7 @@ export default function AdminStudentsPage() {
     async function loadStudents() {
       setIsLoading(true);
 
-      const { data: memberData } = await supabase
+      const { data: memberData } = await api
         .from("organization_members")
         .select("user_id, created_at")
         .eq("organization_id", orgId)
@@ -70,7 +70,7 @@ export default function AdminStudentsPage() {
         if (m.user_id) joinedAtMap[m.user_id] = m.created_at;
       });
 
-      const { data: profileData } = await supabase
+      const { data: profileData } = await api
         .from("profiles")
         .select("id, full_name")
         .in("id", userIds);

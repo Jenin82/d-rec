@@ -1,0 +1,12 @@
+# Generate a random secret of at least 32 characters; never commit .dev.vars.
+BETTER_AUTH_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+JUDGE0_KEY=
+
+# Local runtime settings (deployed values come from Infisical).
+APP_ORIGIN=http://localhost:5173
+AI_GATEWAY_ID=d-rec
+AI_MODEL=@cf/meta/llama-3.2-3b-instruct
+JUDGE0_URL=https://judge0-ce.p.rapidapi.com
+JUDGE0_HOST=judge0-ce.p.rapidapi.com

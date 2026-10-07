@@ -1,5 +1,8 @@
+import { captureCacheContext, invalidateCacheContext } from "@/lib/client-cache-context";
+import { useQuestionStore } from "./question-store";
+import { useSubmissionStore } from "./submission-store";
 import { create } from "zustand";
-import { supabase } from "@/lib/supabase/client";
+import { getAccessibleOrganizations } from "@/lib/api-client";
 
 export type Organization = {
   id: string;
@@ -24,41 +27,20 @@ export const useOrgStore = create<OrgState>((set, get) => ({
   error: null,
 
   fetchOrganizations: async () => {
+    const isCurrent = captureCacheContext();
     set({ isLoading: true, error: null });
 
-    // Get organizations where the user is a member with an admin or owner role
-    const { data: memberData, error: memberError } = await supabase
-      .from("organization_members")
-      .select("organization_id, role")
-      .eq("user_id", (await supabase.auth.getUser()).data.user?.id || "")
-      .in("role", ["teacher", "admin", "owner", "student"]);
-
-    if (memberError) {
-      set({ error: memberError.message, isLoading: false });
+    const { data, error } = await getAccessibleOrganizations();
+    if (!isCurrent()) return;
+    if (error) {
+      set({ error: error.message, isLoading: false });
       return;
     }
-
-    if (!memberData || memberData.length === 0) {
+    const orgs = data || [];
+    if (orgs.length === 0) {
       set({ organizations: [], currentOrg: null, isLoading: false });
       return;
     }
-
-    const orgIds = memberData
-      .map((m) => m.organization_id)
-      .filter((id): id is string => id !== null);
-
-    const { data: orgData, error: orgError } = await supabase
-      .from("organizations")
-      .select("*")
-      .in("id", orgIds)
-      .order("name");
-
-    if (orgError) {
-      set({ error: orgError.message, isLoading: false });
-      return;
-    }
-
-    const orgs = orgData as Organization[];
 
     // Check if we have a saved org preference in localStorage
     const savedOrgId =
@@ -82,9 +64,14 @@ export const useOrgStore = create<OrgState>((set, get) => ({
   },
 
   setCurrentOrg: (org) => {
+    if (get().currentOrg?.id !== org.id) {
+      invalidateCacheContext();
+      useQuestionStore.setState({ programs: [], isLoading: false, error: null });
+      useSubmissionStore.setState({ algorithmSubmissions: [], codeSubmissions: [], isLoading: false, error: null });
+    }
     if (typeof window !== "undefined") {
       localStorage.setItem("selected_org_id", org.id);
     }
-    set({ currentOrg: org });
+    set({ currentOrg: org, isLoading: false, error: null });
   },
 }));

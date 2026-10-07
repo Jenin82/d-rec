@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api-client";
+import { sessionClient as auth } from "@/lib/auth-client";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -79,7 +80,7 @@ export default function AdminUsersPage() {
     setIsLoading(true);
 
     // Fetch active members
-    const { data: memberData } = await supabase
+    const { data: memberData } = await api
       .from("organization_members")
       .select("user_id, role")
       .eq("organization_id", orgId);
@@ -90,7 +91,7 @@ export default function AdminUsersPage() {
         .map((m: any) => m.user_id)
         .filter((id: any): id is string => id !== null);
 
-      const { data: profileData } = await supabase
+      const { data: profileData } = await api
         .from("profiles")
         .select("id, full_name")
         .in("id", userIds);
@@ -109,7 +110,7 @@ export default function AdminUsersPage() {
     }
 
     // Fetch pending invites
-    const { data: inviteData } = await supabase
+    const { data: inviteData } = await api
       .from("org_invites")
       .select("id, email, role")
       .eq("organization_id", orgId);
@@ -138,7 +139,7 @@ export default function AdminUsersPage() {
       .map((e) => e.trim())
       .filter((e) => e.length > 0);
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await auth.getUser();
 
     const invites = emails.map((email) => ({
       organization_id: orgId,
@@ -147,10 +148,10 @@ export default function AdminUsersPage() {
       invited_by: userData.user?.id,
     }));
 
-    const { error } = await supabase.from("org_invites").insert(invites);
+    const { error } = await api.from("org_invites").insert(invites);
 
     if (!error) {
-      toast.success(`${emails.length} user invite(s) sent successfully.`);
+      toast.success(`${emails.length} user invitation(s) created. Users can claim them after verifying their email and opening the dashboard.`);
       setBulkEmails("");
       setIsDialogOpen(false);
       loadUsers(orgId);
@@ -168,7 +169,7 @@ export default function AdminUsersPage() {
 
     if (isPending) {
       // Remove from invites
-      const { error: inviteError } = await supabase
+      const { error: inviteError } = await api
         .from("org_invites")
         .delete()
         .eq("id", userId);
@@ -176,13 +177,13 @@ export default function AdminUsersPage() {
     } else {
       // Prevent owner from removing another owner easily if needed, or removing themselves.
       // Simple guard (for robust guard, backend RLS should handle it).
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData } = await auth.getUser();
       if (userData.user?.id === userId) {
         toast.error("You cannot remove yourself.");
         return;
       }
 
-      const { error: memberError } = await supabase
+      const { error: memberError } = await api
         .from("organization_members")
         .delete()
         .eq("organization_id", orgId)

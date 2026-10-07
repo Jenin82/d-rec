@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { getAuth } from "@/lib/server/auth";
+import { getEnv } from "@/lib/server/runtime";
+import { headers } from "next/headers";
 import {
   BookOpen,
   Code2,
@@ -35,7 +37,7 @@ const features = [
     icon: <Bot className="h-6 w-6" />,
     title: "AI Assistant",
     description:
-      "Get intelligent suggestions, error explanations, and optimized solutions powered by AI.",
+      "Get concise hints and error explanations that help you work through your own solution.",
   },
   {
     icon: <Printer className="h-6 w-6" />,
@@ -55,10 +57,8 @@ const workflow = [
 ];
 
 export default async function LandingPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const session = getEnv().BETTER_AUTH_SECRET ? await getAuth().api.getSession({ headers: await headers() }) : null;
+  const user = session?.user ?? null;
 
   return (
     <div className="min-h-screen">

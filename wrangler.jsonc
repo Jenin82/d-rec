@@ -1,0 +1,100 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "d-rec",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-10-06",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "none"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "d-rec",
+      "database_id": "0a3b78f5-7384-424e-b514-ecfe8d3cb19d",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "d-rec"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "account_id": "5081d6911bf3b21ae1cb615c1b0b28c5",
+  "workers_dev": true,
+  "preview_urls": true,
+  "env": {
+    "production": {
+      "name": "d-rec",
+      "workers_dev": true,
+      "preview_urls": true,
+      "vars": {},
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "d-rec",
+          "database_id": "0a3b78f5-7384-424e-b514-ecfe8d3cb19d",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "FILES",
+          "bucket_name": "d-rec"
+        }
+      ],
+      "ai": {
+        "binding": "AI"
+      }
+    },
+    "staging": {
+      "name": "d-rec",
+      "workers_dev": true,
+      "preview_urls": true,
+      "vars": {},
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "d-rec",
+          "database_id": "0a3b78f5-7384-424e-b514-ecfe8d3cb19d",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "FILES",
+          "bucket_name": "d-rec"
+        }
+      ],
+      "ai": {
+        "binding": "AI"
+      }
+    }
+  },
+  "previews": {
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "d-rec",
+        "database_id": "0a3b78f5-7384-424e-b514-ecfe8d3cb19d",
+        "migrations_dir": "migrations"
+      }
+    ],
+    "r2_buckets": [
+      {
+        "binding": "FILES",
+        "bucket_name": "d-rec"
+      }
+    ],
+    "ai": {
+      "binding": "AI"
+    }
+  }
+}

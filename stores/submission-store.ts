@@ -1,9 +1,11 @@
+import { captureCacheContext } from "@/lib/client-cache-context";
 import { create } from "zustand";
 
-import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api-client";
 
 export type AlgorithmSubmission = {
   id: string;
+  version: number;
   program_id: string;
   student_id: string;
   content: string;
@@ -16,6 +18,7 @@ export type AlgorithmSubmission = {
 
 export type CodeSubmission = {
   id: string;
+  version: number;
   program_id: string;
   student_id: string;
   code: string | null;
@@ -78,15 +81,16 @@ type SubmissionState = {
   ) => Promise<string>;
 };
 
-export const useSubmissionStore = create<SubmissionState>((set) => ({
+export const useSubmissionStore = create<SubmissionState>((set, get) => ({
   algorithmSubmissions: [],
   codeSubmissions: [],
   isLoading: false,
   error: null,
 
   fetchAlgorithmSubmissions: async (filters) => {
+    const isCurrent = captureCacheContext();
     set({ isLoading: true, error: null });
-    let query = supabase
+    let query = api
       .from("algorithm_submissions")
       .select("*")
       .order("created_at", { ascending: false });
@@ -97,6 +101,7 @@ export const useSubmissionStore = create<SubmissionState>((set) => ({
     if (filters?.studentId) query = query.eq("student_id", filters.studentId);
     if (filters?.status) query = query.eq("status", filters.status);
     const { data, error } = await query;
+    if (!isCurrent()) return;
     if (error) {
       set({ error: error.message, isLoading: false });
       return;
@@ -108,12 +113,14 @@ export const useSubmissionStore = create<SubmissionState>((set) => ({
   },
 
   submitAlgorithm: async (submission) => {
-    const { data, error } = await supabase
+    const isCurrent = captureCacheContext();
+    const { data, error } = await api
       .from("algorithm_submissions")
       .insert({ ...submission, status: "pending" })
       .select()
       .single();
-    if (error) return null;
+    if (!isCurrent()) return null;
+    if (error) { set({ error: error.message }); return null; }
     const newSubmission = data as AlgorithmSubmission;
     set((state) => ({
       algorithmSubmissions: [newSubmission, ...state.algorithmSubmissions],
@@ -122,22 +129,27 @@ export const useSubmissionStore = create<SubmissionState>((set) => ({
   },
 
   reviewAlgorithm: async (id, status, feedback) => {
-    const { error } = await supabase
+    const isCurrent = captureCacheContext();
+    const current = get().algorithmSubmissions.find((item) => item.id === id);
+    if (!current) return false;
+    const { error } = await api
       .from("algorithm_submissions")
-      .update({ status, feedback: feedback ?? null })
+      .update({ status, feedback: feedback ?? null, expectedVersion: current.version })
       .eq("id", id);
-    if (error) return false;
+    if (!isCurrent()) return false;
+    if (error) { set({ error: error.message }); return false; }
     set((state) => ({
       algorithmSubmissions: state.algorithmSubmissions.map((s) =>
-        s.id === id ? { ...s, status, feedback: feedback ?? null } : s,
+        s.id === id ? { ...s, status, version: s.version + 1, feedback: feedback ?? null } : s,
       ),
     }));
     return true;
   },
 
   fetchCodeSubmissions: async (filters) => {
+    const isCurrent = captureCacheContext();
     set({ isLoading: true, error: null });
-    let query = supabase
+    let query = api
       .from("code_submissions")
       .select("*")
       .order("created_at", { ascending: false });
@@ -148,6 +160,7 @@ export const useSubmissionStore = create<SubmissionState>((set) => ({
     if (filters?.studentId) query = query.eq("student_id", filters.studentId);
     if (filters?.status) query = query.eq("status", filters.status);
     const { data, error } = await query;
+    if (!isCurrent()) return;
     if (error) {
       set({ error: error.message, isLoading: false });
       return;
@@ -159,12 +172,14 @@ export const useSubmissionStore = create<SubmissionState>((set) => ({
   },
 
   submitCode: async (submission) => {
-    const { data, error } = await supabase
+    const isCurrent = captureCacheContext();
+    const { data, error } = await api
       .from("code_submissions")
       .insert({ ...submission, status: "pending" })
       .select()
       .single();
-    if (error) return null;
+    if (!isCurrent()) return null;
+    if (error) { set({ error: error.message }); return null; }
     const newSubmission = data as CodeSubmission;
     set((state) => ({
       codeSubmissions: [newSubmission, ...state.codeSubmissions],
@@ -173,23 +188,26 @@ export const useSubmissionStore = create<SubmissionState>((set) => ({
   },
 
   reviewCode: async (id, status, feedback) => {
-    const updateData: Record<string, unknown> = { status };
-    if (feedback) updateData.metadata = { feedback };
-    const { error } = await supabase
+    const isCurrent = captureCacheContext();
+    const current = get().codeSubmissions.find((item) => item.id === id);
+    if (!current) return false;
+    const updateData = { status, feedback: feedback || null, expectedVersion: current.version };
+    const { error } = await api
       .from("code_submissions")
       .update(updateData)
       .eq("id", id);
-    if (error) return false;
+    if (!isCurrent()) return false;
+    if (error) { set({ error: error.message }); return false; }
     set((state) => ({
       codeSubmissions: state.codeSubmissions.map((s) =>
-        s.id === id ? { ...s, status } : s,
+        s.id === id ? { ...s, status, version: s.version + 1 } : s,
       ),
     }));
     return true;
   },
 
   getStudentProgramStatus: async (programId, studentId) => {
-    const { data: codeSub } = await supabase
+    const { data: codeSub } = await api
       .from("code_submissions")
       .select("status")
       .eq("program_id", programId)
@@ -201,7 +219,7 @@ export const useSubmissionStore = create<SubmissionState>((set) => ({
     if (codeSub?.status === "approved") return "final_approved";
     if (codeSub?.status === "pending") return "code_submitted";
 
-    const { data: algoSub } = await supabase
+    const { data: algoSub } = await api
       .from("algorithm_submissions")
       .select("status")
       .eq("program_id", programId)

@@ -25,15 +25,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/lib/supabase/client";
+import { apiRequest, getAccessibleOrganizations, type OrganizationAccess } from "@/lib/api-client";
+import { captureCacheContext } from "@/lib/client-cache-context";
+import { sessionClient as auth } from "@/lib/auth-client";
+import { useOrgStore } from "@/stores/org-store";
 import { useAuthStore } from "@/stores/auth-store";
 
-type Organization = {
-  id: string;
-  name: string;
-  description: string | null;
-  role: "owner" | "admin" | "teacher" | "student";
-};
+type Organization = OrganizationAccess;
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -41,6 +39,7 @@ export default function DashboardPage() {
 
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Create Org state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -51,62 +50,37 @@ export default function DashboardPage() {
   useEffect(() => {
     if (user) {
       loadOrganizations();
+    } else {
+      setOrganizations([]);
+      setIsLoading(false);
     }
   }, [user]);
 
   async function processInvites() {
-    // Calls a SECURITY DEFINER function that reads org_invites by email
-    // and inserts into organization_members — bypassing RLS safely.
-    const { error } = await supabase.rpc("accept_my_invites");
+    // Claim invitations for the verified session email on the server.
+    const { error } = await apiRequest("/api/invites/accept", {});
     if (error) {
       console.warn("processInvites:", error.message);
     }
   }
 
   async function loadOrganizations() {
+    const isCurrent = captureCacheContext();
     setIsLoading(true);
+    setError(null);
 
     const userEmail = user?.email;
-    const userId = user!.id;
 
     // First auto-accept any pending invites for this user's email
     if (userEmail) {
       await processInvites();
     }
 
-    // Get user's organization memberships with their role
-    const { data: memberData, error: memberError } = await supabase
-      .from("organization_members")
-      .select(
-        `
-        role,
-        organization_id,
-        organizations (
-          id,
-          name,
-          description
-        )
-      `,
-      )
-      .eq("user_id", userId);
-
-    if (memberError) {
-      console.error("Error loading organizations:", memberError);
-      setIsLoading(false);
-      return;
-    }
-
-    if (memberData) {
-      const formattedOrgs = memberData
-        .filter((m) => m.organizations !== null)
-        .map((m) => ({
-          id: (m.organizations as any).id,
-          name: (m.organizations as any).name,
-          description: (m.organizations as any).description,
-          role: m.role as any,
-        }));
-      setOrganizations(formattedOrgs);
-    }
+    if (!isCurrent()) return;
+    const { data, error } = await getAccessibleOrganizations();
+    if (!isCurrent()) return;
+    if (error) setError(error.message);
+    else setOrganizations(data || []);
 
     setIsLoading(false);
   }
@@ -116,37 +90,16 @@ export default function DashboardPage() {
 
     setIsCreating(true);
 
-    // 1. Create the organization
-    const { data: orgData, error: orgError } = await supabase
-      .from("organizations")
-      .insert({
-        name: newOrgName,
-        description: newOrgDesc || null,
-      })
-      .select()
-      .single();
-
-    if (orgError || !orgData) {
-      console.error("Error creating org:", orgError);
-      setIsCreating(false);
-      return;
-    }
-
-    // 2. Add the user as the owner
-    const { error: memberError } = await supabase
-      .from("organization_members")
-      .insert({
-        organization_id: orgData.id,
-        user_id: user.id,
-        role: "owner",
-      });
-
-    if (!memberError) {
-      // Refresh the list
+    const { error } = await apiRequest("/api/organizations", {
+      name: newOrgName.trim(), description: newOrgDesc.trim() || null,
+    });
+    if (!error) {
       await loadOrganizations();
       setIsCreateOpen(false);
       setNewOrgName("");
       setNewOrgDesc("");
+    } else {
+      setError(error.message);
     }
 
     setIsCreating(false);
@@ -154,15 +107,15 @@ export default function DashboardPage() {
 
   const handleSelectOrg = (org: Organization) => {
     // Set a cookie or local storage to remember the selected org
-    localStorage.setItem("selected_org_id", org.id);
+    useOrgStore.getState().setCurrentOrg({ id: org.id, name: org.name, description: org.description, code: org.code });
 
-    // Map owner to admin for routing purposes
-    const targetRole = org.role === "owner" ? "admin" : org.role;
+    // Effective owner and global superuser access share the admin workspace.
+    const targetRole = org.role === "owner" || org.role === "superuser" ? "admin" : org.role;
     router.push(`/${org.id}/${targetRole}`);
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await auth.signOut();
     router.push("/login");
   };
 
@@ -240,6 +193,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {error && <p role="alert" className="text-destructive mb-4">{error}</p>}
         {isLoading ? (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3].map((i) => (

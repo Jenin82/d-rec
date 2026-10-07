@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Plus, Users, ArrowLeft, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api-client";
+import { sessionClient as auth } from "@/lib/auth-client";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -82,7 +83,7 @@ export default function TeacherClassroomDetailsPage() {
   ];
 
   async function loadClassroom() {
-    const { data } = await supabase
+    const { data } = await api
       .from("classrooms")
       .select("*")
       .eq("id", classroomId)
@@ -99,7 +100,7 @@ export default function TeacherClassroomDetailsPage() {
   async function loadMembers() {
     setIsLoading(true);
 
-    const { data: memberData } = await supabase
+    const { data: memberData } = await api
       .from("classroom_members")
       .select("user_id, role")
       .eq("classroom_id", classroomId);
@@ -112,7 +113,7 @@ export default function TeacherClassroomDetailsPage() {
         .map((m: { user_id: string | null; role: string }) => m.user_id)
         .filter((id) => id !== null);
 
-      const { data: profileData } = await supabase
+      const { data: profileData } = await api
         .from("profiles")
         .select("id, full_name")
         .in("id", userIds);
@@ -135,7 +136,7 @@ export default function TeacherClassroomDetailsPage() {
     }
 
     // Fetch pending invites
-    const { data: inviteData } = await supabase
+    const { data: inviteData } = await api
       .from("classroom_invites")
       .select("id, email")
       .eq("classroom_id", classroomId);
@@ -173,7 +174,7 @@ export default function TeacherClassroomDetailsPage() {
       .map((e) => e.trim())
       .filter((e) => e.length > 0);
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await auth.getUser();
 
     const invites = emails.map((email) => ({
       classroom_id: classroom.id,
@@ -181,7 +182,7 @@ export default function TeacherClassroomDetailsPage() {
       invited_by: userData.user?.id,
     }));
 
-    const { error } = await supabase.from("classroom_invites").insert(invites);
+    const { error } = await api.from("classroom_invites").insert(invites);
 
     if (!error) {
       toast.success("Students added to classroom.");
@@ -201,13 +202,13 @@ export default function TeacherClassroomDetailsPage() {
   ) => {
     let error;
     if (isPending) {
-      const { error: inviteError } = await supabase
+      const { error: inviteError } = await api
         .from("classroom_invites")
         .delete()
         .eq("id", userId);
       error = inviteError;
     } else {
-      const { error: memberError } = await supabase
+      const { error: memberError } = await api
         .from("classroom_members")
         .delete()
         .eq("classroom_id", classroomId)

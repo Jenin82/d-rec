@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Plus, Search } from "lucide-react";
-import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api-client";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,7 @@ export default function QuestionsPage() {
 
   async function loadOrgDetails() {
     if (!orgId) return;
-    const { data: orgData } = await supabase
+    const { data: orgData } = await api
       .from("organizations")
       .select("name")
       .eq("id", orgId)
@@ -52,7 +52,7 @@ export default function QuestionsPage() {
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      fetchPrograms();
+      fetchPrograms(undefined, orgId);
       loadOrgDetails();
     }, 0);
 

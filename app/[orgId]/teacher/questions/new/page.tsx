@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "sonner";
 
 import { useEffect, useState } from "react";
 import { ArrowLeft, Save, Plus } from "lucide-react";
@@ -24,7 +25,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { supabase } from "@/lib/supabase/client";
+import { api, getOrganizationAccess } from "@/lib/api-client";
+import { sessionClient as auth } from "@/lib/auth-client";
 
 export default function CreateQuestionPage() {
   const params = useParams();
@@ -57,40 +59,35 @@ export default function CreateQuestionPage() {
   }, [preselectedClassroomId, classrooms, selectedClassroom]);
 
   async function loadClassrooms() {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await auth.getUser();
     if (!userData.user?.id) return;
 
-    const { data: memberData } = await supabase
-      .from("organization_members")
-      .select("role")
-      .eq("organization_id", orgId)
-      .eq("user_id", userData.user.id)
-      .single();
+    const { data: access, error } = await getOrganizationAccess(orgId);
+    if (error) { setClassrooms([]); toast.error(error.message); return; }
 
-    if (
-      memberData &&
-      (memberData.role === "admin" || memberData.role === "owner")
-    ) {
-      const { data } = await supabase
+    if (access && ["superuser", "admin", "owner"].includes(access.role)) {
+      const { data } = await api
         .from("classrooms")
         .select("id, name")
         .eq("organization_id", orgId);
       if (data) setClassrooms(data);
-    } else {
-      const { data } = await supabase
+    } else if (access?.role === "teacher") {
+      const assignments = await api.from("classroom_members").select("classroom_id").eq("user_id", userData.user.id).eq("role", "teacher");
+      const { data } = await api
         .from("classrooms")
-        .select("id, name, classroom_members!inner(user_id)")
+        .select("id, name")
         .eq("organization_id", orgId)
-        .eq("classroom_members.user_id", userData.user.id);
+        .in("id", (assignments.data || []).map((assignment) => assignment.classroom_id));
       if (data) setClassrooms(data);
     }
   }
 
   const handleCreateQuestion = async () => {
     if (!title || !description || !selectedClassroom) return;
+    if (!classrooms.some((classroom) => classroom.id === selectedClassroom)) { toast.error("Choose a classroom you are assigned to manage."); return; }
     setIsSubmitting(true);
 
-    await createProgram({
+    const created = await createProgram({
       title,
       description,
       classroom_id: selectedClassroom,
@@ -99,6 +96,7 @@ export default function CreateQuestionPage() {
     });
 
     setIsSubmitting(false);
+    if (!created) { toast.error(useQuestionStore.getState().error || "Unable to create assignment. Please try again."); return; }
     router.push(`/${orgId}/teacher/classrooms/${selectedClassroom}`);
   };
 

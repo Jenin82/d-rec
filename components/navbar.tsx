@@ -20,7 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { supabase } from "@/lib/supabase/client";
+import { sessionClient as auth } from "@/lib/auth-client";
 
 export function Navbar() {
   const router = useRouter();
@@ -35,7 +35,7 @@ export function Navbar() {
   const displayName = user?.user_metadata?.full_name || user?.email || "U";
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await auth.signOut();
     router.push("/login");
   };
 

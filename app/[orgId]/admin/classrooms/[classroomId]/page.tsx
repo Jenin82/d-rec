@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Plus, Users, ArrowLeft, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase/client";
+import { api } from "@/lib/api-client";
+import { sessionClient as auth } from "@/lib/auth-client";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -120,7 +121,7 @@ export default function AdminClassroomDetailsPage() {
 
   const fetchAvailableTeachers = async () => {
     // get org members who are teachers/admins/owners
-    const { data: memberData } = await supabase
+    const { data: memberData } = await api
       .from("organization_members")
       .select("user_id, role")
       .eq("organization_id", orgId)
@@ -128,7 +129,7 @@ export default function AdminClassroomDetailsPage() {
 
     if (memberData && memberData.length > 0) {
       const userIds = memberData.map((m: any) => m.user_id);
-      const { data: profileData } = await supabase
+      const { data: profileData } = await api
         .from("profiles")
         .select("id, full_name")
         .in("id", userIds);
@@ -146,7 +147,7 @@ export default function AdminClassroomDetailsPage() {
   };
 
   async function loadClassroom() {
-    const { data } = await supabase
+    const { data } = await api
       .from("classrooms")
       .select("*")
       .eq("id", classroomId)
@@ -163,7 +164,7 @@ export default function AdminClassroomDetailsPage() {
   async function loadMembers() {
     setIsLoading(true);
 
-    const { data: memberData } = await supabase
+    const { data: memberData } = await api
       .from("classroom_members")
       .select("user_id, role")
       .eq("classroom_id", classroomId);
@@ -176,7 +177,7 @@ export default function AdminClassroomDetailsPage() {
         .map((m: any) => m.user_id)
         .filter((id) => id !== null);
 
-      const { data: profileData } = await supabase
+      const { data: profileData } = await api
         .from("profiles")
         .select("id, full_name")
         .in("id", userIds);
@@ -199,7 +200,7 @@ export default function AdminClassroomDetailsPage() {
     }
 
     // Fetch pending invites
-    const { data: inviteData } = await supabase
+    const { data: inviteData } = await api
       .from("classroom_invites")
       .select("id, email")
       .eq("classroom_id", classroomId);
@@ -228,7 +229,7 @@ export default function AdminClassroomDetailsPage() {
       .map((e) => e.trim())
       .filter((e) => e.length > 0);
 
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await auth.getUser();
 
     const invites = emails.map((email) => ({
       classroom_id: classroom.id,
@@ -236,7 +237,7 @@ export default function AdminClassroomDetailsPage() {
       invited_by: userData.user?.id,
     }));
 
-    const { error } = await supabase.from("classroom_invites").insert(invites);
+    const { error } = await api.from("classroom_invites").insert(invites);
 
     if (!error) {
       toast.success("Students added to classroom.");
@@ -252,7 +253,7 @@ export default function AdminClassroomDetailsPage() {
   const handleAddTeacher = async () => {
     if (!selectedTeacherId) return;
     setIsAddingTeacher(true);
-    const { error } = await supabase.from("classroom_members").insert({
+    const { error } = await api.from("classroom_members").insert({
       classroom_id: classroomId,
       user_id: selectedTeacherId,
       role: "teacher",
@@ -276,13 +277,13 @@ export default function AdminClassroomDetailsPage() {
   ) => {
     let error;
     if (isPending) {
-      const { error: inviteError } = await supabase
+      const { error: inviteError } = await api
         .from("classroom_invites")
         .delete()
         .eq("id", userId);
       error = inviteError;
     } else {
-      const { error: memberError } = await supabase
+      const { error: memberError } = await api
         .from("classroom_members")
         .delete()
         .eq("classroom_id", classroomId)

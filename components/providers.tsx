@@ -1,40 +1,27 @@
 "use client";
-
-import type { Session } from "@supabase/supabase-js";
-import { useEffect } from "react";
-
-import { supabase } from "@/lib/supabase/client";
-import { type AuthState, useAuthStore } from "@/stores/auth-store";
+import { useEffect, useRef } from "react";
+import { authClient, toAuthUser } from "@/lib/auth-client";
+import { useAuthStore } from "@/stores/auth-store";
+import { useOrgStore } from "@/stores/org-store";
+import { useQuestionStore } from "@/stores/question-store";
+import { useSubmissionStore } from "@/stores/submission-store";
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const setSession = useAuthStore((state: AuthState) => state.setSession);
-  const setLoading = useAuthStore((state: AuthState) => state.setLoading);
-
+  const previousUser = useRef<string | null | undefined>(undefined);
+  const session = authClient.useSession();
+  const setSession = useAuthStore((state) => state.setSession);
+  const setLoading = useAuthStore((state) => state.setLoading);
   useEffect(() => {
-    let isMounted = true;
-
-    supabase.auth
-      .getSession()
-      .then(({ data }: { data: { session: Session | null } }) => {
-        if (isMounted) {
-          setSession(data.session ?? null);
-        }
-      });
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (event: string, session: Session | null) => {
-        if (isMounted) {
-          setSession(session);
-        }
-      },
-    );
-
-    return () => {
-      isMounted = false;
-      authListener.subscription.unsubscribe();
-      setLoading(false);
-    };
-  }, [setSession, setLoading]);
-
+    if (session.isPending) { setLoading(true); return; }
+    const userId = session.data?.user.id ?? null;
+    if (previousUser.current !== undefined && previousUser.current !== userId) {
+      useOrgStore.setState({ organizations: [], currentOrg: null, isLoading: false, error: null });
+      useQuestionStore.setState({ programs: [], isLoading: false, error: null });
+      useSubmissionStore.setState({ algorithmSubmissions: [], codeSubmissions: [], isLoading: false, error: null });
+      localStorage.removeItem("selected_org_id");
+    }
+    previousUser.current = userId;
+    setSession(session.data ? { user: toAuthUser(session.data.user) } : null);
+  }, [session.data, session.isPending, setSession, setLoading]);
   return <>{children}</>;
 }
