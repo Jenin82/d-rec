@@ -22,7 +22,7 @@ Production DB is configured with D1 UUID
 `0a3b78f5-7384-424e-b514-ecfe8d3cb19d`. These
 are source configuration, not Infisical secrets. The top-level and both environment bindings use the same D1 resource; local
 development still uses local emulated storage. Confirm/create the private
-`d-rec-avatars` R2 bucket and the `d-rec` AI Gateway in that same account, or
+`d-rec` R2 bucket and the `d-rec` AI Gateway in that same account, or
 change their names in production config and Infisical respectively. The central
 runner does not provision these resources. The configured D1 is intentionally shared by both deployed environments.
 

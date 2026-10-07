@@ -21,7 +21,7 @@
   "r2_buckets": [
     {
       "binding": "FILES",
-      "bucket_name": "d-rec-avatars"
+      "bucket_name": "d-rec"
     }
   ],
   "ai": {
@@ -47,7 +47,7 @@
       "r2_buckets": [
         {
           "binding": "FILES",
-          "bucket_name": "d-rec-avatars"
+          "bucket_name": "d-rec"
         }
       ],
       "ai": {
@@ -70,7 +70,7 @@
       "r2_buckets": [
         {
           "binding": "FILES",
-          "bucket_name": "d-rec-avatars"
+          "bucket_name": "d-rec"
         }
       ],
       "ai": {
@@ -90,7 +90,7 @@
     "r2_buckets": [
       {
         "binding": "FILES",
-        "bucket_name": "d-rec-avatars"
+        "bucket_name": "d-rec"
       }
     ],
     "ai": {

@@ -1,7 +1,7 @@
 # D-Rec repository notes
 
 - Runtime is vinext + Cloudflare Workers; `wrangler.jsonc` owns DB, FILES, AI and origin configuration. Production account/DB IDs are configured. Dev uses native Preview stg with the same D1/R2 by explicit user choice; staging writes affect production data. Local Wrangler state remains local.
-- Fresh setup only: retain Judge0, private R2 avatars and browser PDF downloads. No Supabase runtime or data import.
+- Fresh setup only: retain Judge0, private R2 bucket `d-rec` (currently avatars) and browser PDF downloads. No Supabase runtime or data import.
 - Better Auth is Google-only and requires a secret plus Google OAuth credentials; protected access requires a live verified user with a linked Google account; server APIs enforce organization membership and assigned-classroom teacher management. Never trust selected organization state for authorization.
 - Global access comes only from operator-managed `platform_admins` email grants matched to the live verified auth identity. Recheck grants in mutation SQL; target classroom staff still need actual organization membership. Keep profile writes/private fields and avatars owner-only.
 - Submission writes require versions; pending/approved work must be explicitly reopened. Assigned teachers and organization owners/admins can approve, and approved algorithms gate final code submission.

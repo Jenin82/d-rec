@@ -9,7 +9,7 @@ const { validateDeployment } = await import(validatorPath) as {
 function deployment() {
   const bindings = {
     d1_databases: [{ binding: 'DB', database_id: '12345678-abcd-1234-5678-123456789abc', migrations_dir: 'migrations' }],
-    r2_buckets: [{ binding: 'FILES', bucket_name: 'd-rec-avatars' }],
+    r2_buckets: [{ binding: 'FILES', bucket_name: 'd-rec' }],
     ai: { binding: 'AI' },
   };
   return {
